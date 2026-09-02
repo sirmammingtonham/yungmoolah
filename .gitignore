@@ -1,0 +1,21 @@
+# Build output
+/build
+/app/build/
+/captures
+.externalNativeBuild
+.cxx
+
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+
+# IDE
+*.iml
+/.idea/
+.DS_Store
+
+# Machine-specific and secret
+/local.properties
+/keystore.properties
+*.jks
+*.keystore
