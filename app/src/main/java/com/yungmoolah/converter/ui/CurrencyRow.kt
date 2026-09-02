@@ -10,15 +10,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,6 +45,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yungmoolah.converter.ui.theme.AmountTextStyle
+import com.yungmoolah.converter.ui.theme.MoolahShapes
+import com.yungmoolah.converter.ui.theme.RateLabelStyle
+
+/** Width of the clear-button column, reserved on every row so amounts stay aligned. */
+private val ClearSlotWidth = 32.dp
 
 /**
  * One pinned currency: flag and identity on the left, an editable amount on the right.
@@ -55,6 +63,7 @@ fun CurrencyRow(
     row: CurrencyRowUi,
     onAmountChanged: (String) -> Unit,
     onFocused: () -> Unit,
+    onClear: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -66,32 +75,32 @@ fun CurrencyRow(
         targetValue = if (row.isActive) colors.secondaryContainer else colors.surfaceContainer,
         label = "rowContainer",
     )
+    // Inactive rows are flat fills; only the row being edited is outlined, so the
+    // accent marks one thing instead of drawing a grid of boxes.
     val borderColor by animateColorAsState(
-        targetValue = if (row.isActive) colors.primary else colors.outlineVariant,
+        targetValue = if (row.isActive) colors.primary else Color.Transparent,
         label = "rowBorder",
     )
 
     Surface(
         color = containerColor,
-        shape = RoundedCornerShape(24.dp),
+        shape = MoolahShapes.Card,
         modifier = modifier
             .fillMaxWidth()
-            .border(
-                width = if (row.isActive) 1.5.dp else 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(24.dp),
-            ),
+            .border(width = 1.dp, color = borderColor, shape = MoolahShapes.Card),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            modifier = Modifier
+                .heightIn(min = 64.dp)
+                .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         ) {
             // The identity block doubles as the row's gesture target: tapping it moves
             // focus to the amount, long-pressing promotes the row to the top.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .width(148.dp)
+                    .width(140.dp)
                     .pointerInput(row.code) {
                         detectTapGestures(
                             onTap = { focusRequester.requestFocus() },
@@ -102,7 +111,7 @@ fun CurrencyRow(
                         )
                     },
             ) {
-                Text(text = row.info.flag, fontSize = 26.sp)
+                Text(text = row.info.flag, fontSize = 22.sp)
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -112,10 +121,10 @@ fun CurrencyRow(
                             color = colors.onSurface,
                         )
                         if (row.info.symbol != row.code) {
-                            Spacer(Modifier.width(6.dp))
+                            Spacer(Modifier.width(5.dp))
                             Text(
                                 text = row.info.symbol,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = colors.onSurfaceVariant,
                             )
                         }
@@ -156,7 +165,7 @@ fun CurrencyRow(
                                 Text(
                                     text = "0",
                                     style = AmountTextStyle.copy(
-                                        color = colors.onSurfaceVariant.copy(alpha = 0.4f),
+                                        color = colors.onSurfaceVariant.copy(alpha = 0.35f),
                                         textAlign = TextAlign.End,
                                     ),
                                     modifier = Modifier.fillMaxWidth(),
@@ -167,13 +176,31 @@ fun CurrencyRow(
                     },
                 )
                 row.rateLabel?.let { label ->
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(3.dp))
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = RateLabelStyle,
                         color = colors.onSurfaceVariant,
                         maxLines = 1,
                     )
+                }
+            }
+
+            // Reserved on every row, filled only on the one being edited, so the
+            // amounts stay in one column instead of shifting as focus moves.
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.width(ClearSlotWidth),
+            ) {
+                if (row.isActive && row.amountText.isNotEmpty()) {
+                    IconButton(onClick = onClear, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Clear amount",
+                            tint = colors.onSecondaryContainer.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
         }
@@ -182,7 +209,7 @@ fun CurrencyRow(
 
 /** Steps the amount down a size or two so long currencies still fit on one line. */
 private fun amountFontSize(length: Int) = when {
-    length <= 9 -> 26.sp
+    length <= 9 -> 27.sp
     length <= 12 -> 22.sp
     length <= 15 -> 19.sp
     else -> 16.sp
@@ -193,20 +220,20 @@ private fun amountFontSize(length: Int) = when {
 fun RowDismissBackground(modifier: Modifier = Modifier) {
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
-        shape = RoundedCornerShape(24.dp),
+        shape = MoolahShapes.Card,
         modifier = modifier.fillMaxWidth(),
     ) {
         Box(
             contentAlignment = Alignment.CenterEnd,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(end = 28.dp),
+                .padding(end = 22.dp),
         ) {
             Icon(
                 imageVector = Icons.Rounded.DeleteOutline,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
     }

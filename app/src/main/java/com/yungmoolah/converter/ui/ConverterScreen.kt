@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CloudOff
@@ -27,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.yungmoolah.converter.data.ALL_CURRENCIES
+import com.yungmoolah.converter.ui.theme.MoolahShapes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +55,7 @@ fun ConverterScreen(
     state: ConverterUiState,
     onAmountChanged: (String, String) -> Unit,
     onRowFocused: (String) -> Unit,
+    onClear: (String) -> Unit,
     onRemove: (String) -> Unit,
     onMoveToTop: (String) -> Unit,
     onAdd: (String) -> Unit,
@@ -70,6 +72,10 @@ fun ConverterScreen(
             val result = snackbarHostState.showSnackbar(
                 message = message,
                 actionLabel = if (isUndoable) "Undo" else null,
+                withDismissAction = isUndoable,
+                // Material defaults an action snackbar to Indefinite, which leaves
+                // the "Removed …" bar parked on screen until it is tapped.
+                duration = SnackbarDuration.Short,
             )
             if (result == SnackbarResult.ActionPerformed) onUndoRemove()
             onMessageShown()
@@ -91,8 +97,8 @@ fun ConverterScreen(
                 .imePadding(),
         ) {
             LazyColumn(
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 40.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 40.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item(key = "header") {
@@ -122,6 +128,7 @@ fun ConverterScreen(
                             row = row,
                             onAmountChanged = { onAmountChanged(row.code, it) },
                             onFocused = { onRowFocused(row.code) },
+                            onClear = { onClear(row.code) },
                             onLongPress = { onMoveToTop(row.code) },
                         )
                     }
@@ -136,8 +143,8 @@ fun ConverterScreen(
 
                 item(key = "footer") {
                     Text(
-                        text = "Rates by exchangerate-api.com · swipe a row to remove · " +
-                            "long-press to move it to the top",
+                        text = "Swipe a row to remove · long-press to move it to the top\n" +
+                            "Rates by exchangerate-api.com",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -164,23 +171,22 @@ fun ConverterScreen(
 
 @Composable
 private fun Header(state: ConverterUiState, onRefresh: () -> Unit) {
-    Column(modifier = Modifier.padding(bottom = 6.dp)) {
+    Column(modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 10.dp)) {
         Text(
             text = "YungMoolah",
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onBackground,
         )
-        Spacer(Modifier.height(8.dp))
-        StatusChip(state = state, onRefresh = onRefresh)
         AnimatedVisibility(visible = state.rows.isNotEmpty() && state.activeCode.isNotEmpty()) {
             Text(
                 text = "Editing ${state.activeCode} — every other row follows",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 10.dp),
+                modifier = Modifier.padding(top = 5.dp),
             )
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(12.dp))
+        StatusChip(state = state, onRefresh = onRefresh)
     }
 }
 
@@ -197,34 +203,34 @@ private fun StatusChip(state: ConverterUiState, onRefresh: () -> Unit) {
     val showWarning = state.isOffline && !state.isRefreshing
 
     Surface(
-        color = if (showWarning) colors.tertiaryContainer else colors.surfaceContainerHigh,
-        shape = RoundedCornerShape(50),
-        modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onRefresh),
+        color = if (showWarning) colors.tertiaryContainer else colors.surfaceContainer,
+        shape = MoolahShapes.Chip,
+        modifier = Modifier.clip(MoolahShapes.Chip).clickable(onClick = onRefresh),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 12.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
         ) {
             when {
                 state.isRefreshing -> CircularProgressIndicator(
                     strokeWidth = 2.dp,
                     color = colors.primary,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(13.dp),
                 )
                 showWarning -> Icon(
                     imageVector = Icons.Rounded.CloudOff,
                     contentDescription = null,
                     tint = colors.onTertiaryContainer,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(14.dp),
                 )
                 else -> Icon(
                     imageVector = Icons.Rounded.Refresh,
                     contentDescription = null,
                     tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(14.dp),
                 )
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(7.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
@@ -238,11 +244,11 @@ private fun StatusChip(state: ConverterUiState, onRefresh: () -> Unit) {
 private fun AddCurrencyTile(enabled: Boolean, onClick: () -> Unit) {
     if (!enabled) return
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = MoolahShapes.Card,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(MoolahShapes.Card)
             .clickable(onClick = onClick),
     ) {
         Row(
@@ -250,13 +256,13 @@ private fun AddCurrencyTile(enabled: Boolean, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 18.dp),
+                .padding(vertical = 16.dp),
         ) {
             Icon(
                 imageVector = Icons.Rounded.Add,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.width(8.dp))
             Text(

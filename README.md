@@ -25,6 +25,8 @@ working offline.
   hand.
 - **Pin, reorder, remove.** Add from a searchable list of every supported currency,
   swipe a row away (with undo), long-press one to move it to the top.
+- **Clear in one tap.** The row being edited carries a clear button; clearing it
+  blanks every row so you can start a new figure.
 
 ## Install
 
@@ -78,6 +80,7 @@ Single-module Android app, Kotlin and Jetpack Compose with Material 3.
 | `domain/` | `Conversion`, `AmountFormat` | Cross-rate maths, input sanitising, number formatting |
 | `ui/` | `ConverterViewModel`, `ConverterScreen`, `CurrencyRow`, `AddCurrencySheet` | State and presentation |
 | `work/` | `RefreshWorker` | Periodic background refresh |
+| `ui/theme/` | `Color`, `Type`, `Shape`, `Theme` | Palette, the Inter type scale, corner radii |
 
 A few decisions worth knowing:
 
@@ -91,6 +94,12 @@ A few decisions worth knowing:
   always read and written whole.
 - **Conversion output is `Double?`.** A currency missing from the snapshot renders
   as an empty field rather than a plausible-looking wrong number.
+- **Type is Inter**, instanced at three static weights and subset to the characters
+  the app renders — about 260 KB in total. Flag emoji and the Arabic and
+  Devanagari currency symbols fall outside that subset and fall back to the system
+  font, which is where they should come from anyway. Amounts and rates use the
+  font's `tnum` feature so digits are fixed-width and the numbers do not jitter as
+  they update.
 - **The rates provider** is the keyless tier of [exchangerate-api.com]
   (`open.er-api.com`), which needs no account or API key and republishes daily.
   Swap `RatesApi.DEFAULT_BASE_URL` to change providers.
@@ -109,5 +118,13 @@ since the Compose and Android-dependent cases run under Robolectric.
 | `ConverterScreenTest`, `CurrencyPickerTest` | The composed UI and its callbacks |
 | `AppStartupTest` | Boots the real Application and Activity |
 | `ScreenshotTest` | Renders each state to `app/build/screenshots` |
+
+`ScreenshotTest` is also how the images at the top of this file are produced, so
+a design change can be reviewed without a device.
+
+## Licence
+
+Inter is used under the SIL Open Font License; the full text is in
+[`docs/licenses/Inter-OFL.txt`](docs/licenses/Inter-OFL.txt).
 
 [exchangerate-api.com]: https://www.exchangerate-api.com

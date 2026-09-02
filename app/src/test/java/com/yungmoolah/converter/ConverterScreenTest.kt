@@ -1,8 +1,11 @@
 package com.yungmoolah.converter
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -13,6 +16,7 @@ import com.yungmoolah.converter.ui.ConverterUiState
 import com.yungmoolah.converter.ui.CurrencyRowUi
 import com.yungmoolah.converter.ui.theme.MoolahTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -108,6 +112,60 @@ class ConverterScreenTest {
     }
 
     @Test
+    fun `only the row being edited offers a clear button`() {
+        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+
+        // One clear button on screen, and it belongs to the active row.
+        compose.onAllNodesWithContentDescription("Clear amount").assertCountEquals(1)
+    }
+
+    @Test
+    fun `the clear button reports the row it belongs to`() {
+        var cleared: String? = null
+        compose.setContent { MoolahTheme { ConverterScreen(state, onClear = { cleared = it }) } }
+
+        compose.onNodeWithContentDescription("Clear amount").performClick()
+
+        assertEquals("USD", cleared)
+    }
+
+    @Test
+    fun `an empty active row has nothing to clear`() {
+        compose.setContent {
+            MoolahTheme {
+                ConverterScreen(
+                    state.copy(rows = state.rows.map { it.copy(amountText = "") })
+                )
+            }
+        }
+
+        compose.onAllNodesWithContentDescription("Clear amount").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the removal snackbar dismisses itself`() {
+        var messageConsumed = false
+        compose.setContent {
+            MoolahTheme {
+                ConverterScreen(
+                    state.copy(transientMessage = "Removed GBP"),
+                    onMessageShown = { messageConsumed = true },
+                )
+            }
+        }
+
+        compose.onNodeWithText("Removed GBP").assertExists()
+        compose.onNodeWithText("Undo").assertExists()
+
+        // Regression: Material defaults a snackbar with an action to Indefinite, so
+        // this bar used to sit on screen until it was tapped.
+        compose.waitUntil(timeoutMillis = 15_000) {
+            compose.onAllNodesWithText("Removed GBP").fetchSemanticsNodes().isEmpty()
+        }
+        assertTrue("expected the message to be consumed after dismissal", messageConsumed)
+    }
+
+    @Test
     fun `the add tile opens the picker`() {
         compose.setContent { MoolahTheme { ConverterScreen(state) } }
 
@@ -136,14 +194,17 @@ private fun ConverterScreen(
     onAmountChanged: (String, String) -> Unit = { _, _ -> },
     onAdd: (String) -> Unit = {},
     onRefresh: () -> Unit = {},
+    onClear: (String) -> Unit = {},
+    onMessageShown: () -> Unit = {},
 ) = ConverterScreen(
     state = state,
     onAmountChanged = onAmountChanged,
     onRowFocused = {},
+    onClear = onClear,
     onRemove = {},
     onMoveToTop = {},
     onAdd = onAdd,
     onUndoRemove = {},
     onRefresh = onRefresh,
-    onMessageShown = {},
+    onMessageShown = onMessageShown,
 )

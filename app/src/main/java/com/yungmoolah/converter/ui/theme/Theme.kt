@@ -69,6 +69,7 @@ fun MoolahTheme(
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
         typography = MoolahTypography,
+        shapes = MoolahShapeScheme,
         content = content,
     )
 }

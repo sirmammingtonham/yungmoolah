@@ -82,17 +82,17 @@ class ScreenshotTest {
 
     @Test
     fun light() = shoot("light", dark = false) {
-        ConverterScreen(state, {_,_->}, {}, {}, {}, {}, {}, {}, {})
+        ConverterScreen(state, {_,_->}, {}, {}, {}, {}, {}, {}, {}, {})
     }
 
     @Test
     fun dark() = shoot("dark", dark = true) {
-        ConverterScreen(state, {_,_->}, {}, {}, {}, {}, {}, {}, {})
+        ConverterScreen(state, {_,_->}, {}, {}, {}, {}, {}, {}, {}, {})
     }
 
     @Test
     fun offline() = shoot("offline", dark = false) {
-        ConverterScreen(state.copy(isOffline = true), {_,_->}, {}, {}, {}, {}, {}, {}, {})
+        ConverterScreen(state.copy(isOffline = true), {_,_->}, {}, {}, {}, {}, {}, {}, {}, {})
     }
 
     @Test

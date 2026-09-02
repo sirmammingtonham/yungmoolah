@@ -2,40 +2,112 @@ package com.yungmoolah.converter.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.yungmoolah.converter.R
 
 /**
- * Monospaced-width digits. Without this, every keystroke re-measures the amount
- * and the numbers visibly jitter as they update.
+ * Inter, subset to the characters this app renders and instanced at three static
+ * weights. Anything outside that subset — flag emoji, the Arabic and Devanagari
+ * currency symbols — falls back to the system font, which is what should happen.
  */
-val TabularFigures = TextStyle(fontFeatureSettings = "tnum")
+val Inter = FontFamily(
+    Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_medium, FontWeight.Medium),
+    Font(R.font.inter_semibold, FontWeight.SemiBold),
+)
 
-private val default = Typography()
-
+/**
+ * Tight tracking on the large sizes and roomier tracking on the small ones: Inter
+ * is drawn for that, and it is most of what separates a considered screen from a
+ * default one.
+ */
 val MoolahTypography = Typography(
-    displaySmall = default.displaySmall.copy(
-        fontWeight = FontWeight.Medium,
-        letterSpacing = (-1).sp,
-    ),
-    headlineMedium = default.headlineMedium.copy(
+    displaySmall = TextStyle(
+        fontFamily = Inter,
+        fontSize = 34.sp,
+        lineHeight = 38.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.25).sp,
+        letterSpacing = (-1.2).sp,
     ),
-    titleMedium = default.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-    labelLarge = default.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-    labelSmall = default.labelSmall.copy(
-        fontFamily = FontFamily.Default,
+    headlineSmall = TextStyle(
+        fontFamily = Inter,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = (-0.5).sp,
+    ),
+    titleMedium = TextStyle(
+        fontFamily = Inter,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.2.sp,
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = Inter,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.Normal,
+        letterSpacing = 0.sp,
+    ),
+    bodySmall = TextStyle(
+        fontFamily = Inter,
+        fontSize = 12.5.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.Normal,
+        letterSpacing = 0.sp,
+    ),
+    labelLarge = TextStyle(
+        fontFamily = Inter,
+        fontSize = 14.sp,
+        lineHeight = 18.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.1.sp,
+    ),
+    labelMedium = TextStyle(
+        fontFamily = Inter,
+        fontSize = 12.5.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.sp,
+    ),
+    labelSmall = TextStyle(
+        fontFamily = Inter,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.1.sp,
     ),
 )
 
-/** The style used for every editable amount. */
+/**
+ * The per-row unit rate. Tabular figures keep the decimals in a column as rates
+ * change; applying `tnum` to every small label instead would also monospace
+ * punctuation and leave visible gaps around hyphens in prose.
+ */
+val RateLabelStyle = TextStyle(
+    fontFamily = Inter,
+    fontSize = 11.sp,
+    lineHeight = 14.sp,
+    fontWeight = FontWeight.Medium,
+    letterSpacing = 0.sp,
+    fontFeatureSettings = "tnum",
+)
+
+/**
+ * The style used for every editable amount.
+ *
+ * `tnum` gives fixed-width digits; without it every keystroke re-measures the
+ * number and the row visibly jitters as it updates.
+ */
 val AmountTextStyle = TextStyle(
-    fontSize = 26.sp,
+    fontFamily = Inter,
+    fontSize = 27.sp,
     lineHeight = 32.sp,
     fontWeight = FontWeight.SemiBold,
-    letterSpacing = (-0.5).sp,
+    letterSpacing = (-1).sp,
     fontFeatureSettings = "tnum",
 )

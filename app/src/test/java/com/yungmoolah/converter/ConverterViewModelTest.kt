@@ -149,6 +149,43 @@ class ConverterViewModelTest {
         }
 
     @Test
+    fun `clearing empties every row and leaves the row ready to type into`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(RATES_BODY))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "100")
+        advanceUntilIdle()
+        assertEquals("91.42", state().rows.first { it.code == "EUR" }.amountText)
+
+        viewModel.clearAmount("USD")
+        advanceUntilIdle()
+
+        assertTrue(state().rows.all { it.amountText.isEmpty() })
+        assertEquals("USD", state().activeCode)
+
+        // Typing straight after a clear works, with no leftover digits.
+        viewModel.onAmountChanged("USD", "7")
+        advanceUntilIdle()
+        assertEquals("7", state().rows.first { it.code == "USD" }.amountText)
+        assertEquals("6.40", state().rows.first { it.code == "EUR" }.amountText)
+    }
+
+    @Test
+    fun `clearing a row that was not active takes over the editing`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(RATES_BODY))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "100")
+        advanceUntilIdle()
+
+        viewModel.clearAmount("JPY")
+        advanceUntilIdle()
+
+        assertEquals("JPY", state().activeCode)
+        assertTrue(state().rows.all { it.amountText.isEmpty() })
+    }
+
+    @Test
     fun `rejected keystrokes leave the amount untouched`() = runTest(dispatcher) {
         server.enqueue(MockResponse().setBody(RATES_BODY))
         val state = collectState()

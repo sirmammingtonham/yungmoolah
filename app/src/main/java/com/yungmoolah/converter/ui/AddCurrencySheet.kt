@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Search
@@ -40,6 +39,7 @@ import com.yungmoolah.converter.data.ALL_CURRENCIES
 import com.yungmoolah.converter.data.CURRENCY_BY_CODE
 import com.yungmoolah.converter.data.CurrencyInfo
 import com.yungmoolah.converter.data.POPULAR_CODES
+import com.yungmoolah.converter.ui.theme.MoolahShapes
 
 /**
  * Currency picker. Opens on the common currencies and narrows as you type,
@@ -57,6 +57,7 @@ fun AddCurrencySheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        shape = MoolahShapes.Sheet,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         CurrencyPickerContent(pinned = pinned, onPick = onPick)
@@ -95,7 +96,7 @@ fun CurrencyPickerContent(
                 singleLine = true,
                 placeholder = { Text("Search code or name") },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                shape = RoundedCornerShape(16.dp),
+                shape = MoolahShapes.Field,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 16.dp)

@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     onAmountChanged = viewModel::onAmountChanged,
                     onRowFocused = viewModel::onRowFocused,
+                    onClear = viewModel::clearAmount,
                     onRemove = viewModel::removeCurrency,
                     onMoveToTop = viewModel::moveToTop,
                     onAdd = viewModel::addCurrency,

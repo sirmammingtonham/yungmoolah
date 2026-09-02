@@ -120,6 +120,17 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
         persistActive(code)
     }
 
+    /**
+     * Empties the amount being edited, which blanks every row.
+     *
+     * [code] becomes the active row first, so the button clears the field the user
+     * is looking at even if focus had moved on.
+     */
+    fun clearAmount(code: String) {
+        editor.update { it.copy(activeCode = code, input = "") }
+        if (uiState.value.activeCode != code) persistActive(code)
+    }
+
     fun addCurrency(code: String) {
         if (!CURRENCY_BY_CODE.containsKey(code)) return
         viewModelScope.launch {
