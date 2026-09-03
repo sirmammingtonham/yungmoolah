@@ -136,7 +136,7 @@ A few decisions worth knowing:
 
 ## Tests
 
-`./gradlew testDebugUnitTest` runs 157 JVM tests — no device or emulator needed,
+`./gradlew testDebugUnitTest` runs 161 JVM tests — no device or emulator needed,
 since the Compose and Android-dependent cases run under Robolectric.
 
 | Suite | Covers |
@@ -147,6 +147,7 @@ since the Compose and Android-dependent cases run under Robolectric.
 | `ExpressionTest` | Operator precedence, brackets, malformed and half-typed sums |
 | `MentalMathTest` | That every recipe is doable in your head and honest about its error |
 | `ShortcutsListTest` | The shortcuts tab |
+| `KeyboardInsetTest` | Posts a real IME inset and checks the room the list is left |
 | `RatesApiTest` | Parsing, HTTP errors, malformed and provider-level failures |
 | `ConverterViewModelTest` | The real store and repository: editing, pinning, offline fallback |
 | `ConverterScreenTest`, `CurrencyPickerTest` | The composed UI and its callbacks |
@@ -155,6 +156,12 @@ since the Compose and Android-dependent cases run under Robolectric.
 
 `ScreenshotTest` is also how the images at the top of this file are produced, so
 a design change can be reviewed without a device.
+
+Robolectric reports no keyboard, so a screen that mishandles the IME inset still
+renders perfectly in every screenshot — which is how the content came to subtract
+the keyboard twice and collapse the list to a sliver. `KeyboardInsetTest` posts a
+real inset into the view hierarchy instead, and asserts how much height the list
+is actually left with.
 
 ## Licence
 

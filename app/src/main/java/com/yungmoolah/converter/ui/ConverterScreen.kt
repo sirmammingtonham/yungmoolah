@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,12 +48,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.yungmoolah.converter.data.ALL_CURRENCIES
 import com.yungmoolah.converter.ui.theme.MoolahShapes
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+
+/** Identifies the converter list so a test can measure the space it is given. */
+const val ConverterListTag: String = "converterList"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,18 +119,22 @@ fun MoolahScreen(
                         val shown = state.rows.firstOrNull { it.isActive }?.amountText.orEmpty()
                         onAmountChanged(state.activeCode, shown + key)
                     },
-                    modifier = Modifier.imePadding(),
+                    // Above the keyboard while it is up, above the navigation bar
+                    // when it is not: imePadding consumes the keyboard inset, so
+                    // navigationBarsPadding only adds anything once it is gone.
+                    modifier = Modifier.imePadding().navigationBarsPadding(),
                 )
             }
         },
     ) { insets ->
         Column(
+            // `insets` already accounts for the keyboard: Scaffold sets the content's
+            // bottom padding to the height of the bottom bar, and that bar carries
+            // its own imePadding. Adding imePadding here as well subtracted the
+            // keyboard twice and collapsed the list to a sliver.
             modifier = Modifier
                 .fillMaxSize()
-                .padding(insets)
-                // The content shrinks around the keyboard so the row being edited
-                // stays on screen instead of hiding behind it.
-                .imePadding(),
+                .padding(insets),
         ) {
             AppHeader(
                 selected = tab,
@@ -152,7 +161,7 @@ fun MoolahScreen(
                 state = listState,
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag(ConverterListTag),
             ) {
                 items(count = state.rows.size, key = { state.rows[it].code }) { index ->
                     val row = state.rows[index]
