@@ -168,6 +168,16 @@ fun formatForEditing(value: Double, code: String): String {
     return formatted.trimEnd('0').trimEnd('.').ifEmpty { "" }
 }
 
+/**
+ * Formats a converted ladder amount.
+ *
+ * Drops the decimals once the figure is into the thousands: "8,840" carries every
+ * digit that helps, where "8,840.00" only adds noise to a column meant for
+ * glancing at.
+ */
+fun formatLadderAmount(value: Double, code: String): String =
+    if (value >= 1_000) formatWhole(value) else formatAmount(value, code)
+
 /** Groups a round number with no decimals, for a ladder of amounts. */
 fun formatWhole(value: Double): String = grouping(0).format(round(value, 0))
 

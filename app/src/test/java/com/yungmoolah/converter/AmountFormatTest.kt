@@ -2,6 +2,7 @@ package com.yungmoolah.converter
 
 import com.yungmoolah.converter.domain.formatAmount
 import com.yungmoolah.converter.domain.formatForEditing
+import com.yungmoolah.converter.domain.formatLadderAmount
 import com.yungmoolah.converter.domain.formatRate
 import com.yungmoolah.converter.domain.parseAmount
 import com.yungmoolah.converter.domain.sanitizeAmountInput
@@ -103,6 +104,14 @@ class AmountFormatTest {
             assertEquals(raw, sanitizeAmountInput(raw, "x"))
             parseAmount(raw) // must not throw
         }
+    }
+
+    @Test
+    fun `a ladder amount loses its decimals once it reaches the thousands`() {
+        assertEquals("113.12", formatLadderAmount(113.1234, "USD"))
+        assertEquals("8,840", formatLadderAmount(8840.0, "INR"))
+        assertEquals("14,720", formatLadderAmount(14720.0, "JPY"))
+        assertEquals("0.68", formatLadderAmount(0.6793, "USD"))
     }
 
     @Test

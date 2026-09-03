@@ -14,12 +14,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import com.yungmoolah.converter.domain.formatAmount
 import com.yungmoolah.converter.domain.formatRate
-import com.yungmoolah.converter.domain.ladderFor
-import com.yungmoolah.converter.domain.mentalShortcut
 import com.yungmoolah.converter.ui.AppHeader
 import com.yungmoolah.converter.ui.CurrencyPickerContent
 import com.yungmoolah.converter.ui.MoolahTab
-import com.yungmoolah.converter.ui.ShortcutCardUi
 import com.yungmoolah.converter.ui.ShortcutsList
 import com.yungmoolah.converter.ui.CurrencyRowUi
 import com.yungmoolah.converter.ui.theme.MoolahTheme
@@ -64,19 +61,10 @@ class ScreenshotTest {
         isLoading = false,
         ratesUpdatedAtMillis = System.currentTimeMillis() - 7_200_000L,
         pinnedCodes = listOf("USD", "EUR", "GBP", "JPY", "INR"),
-        // Foreign-to-home, the direction the tab actually shows, so the rates
-        // quoted per dollar are inverted here just as the ViewModel inverts them.
-        shortcuts = listOf("EUR" to 0.9142, "GBP" to 0.7891, "JPY" to 147.2, "INR" to 88.4)
-            .map { (code, perDollar) ->
-                val rate = 1.0 / perDollar
-                ShortcutCardUi(
-                    from = CURRENCY_BY_CODE.getValue(code),
-                    to = CURRENCY_BY_CODE.getValue("USD"),
-                    rate = rate,
-                    shortcut = mentalShortcut(rate)!!,
-                    ladder = ladderFor(rate),
-                )
-            },
+        homeCode = "USD",
+        // Cards are built exactly as the ViewModel builds them, from rates quoted
+        // per dollar, so the render cannot drift from the real screen.
+        shortcuts = perDollar.map { (code, rate) -> shortcutCard(code, rate) },
     )
 
     private fun shoot(
@@ -134,6 +122,7 @@ class ScreenshotTest {
     }
 
     @Test
+    @Config(sdk = [34], application = android.app.Application::class, qualifiers = "w411dp-h1400dp-xhdpi")
     fun shortcuts() = shoot("shortcuts", dark = false) {
         androidx.compose.foundation.layout.Column {
             AppHeader(selected = MoolahTab.Shortcuts, onSelect = {})

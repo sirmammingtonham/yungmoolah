@@ -1,6 +1,8 @@
 package com.yungmoolah.converter
 
 import androidx.compose.runtime.Composable
+import android.view.KeyEvent as NativeKeyEvent
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
@@ -11,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyPress
 import androidx.compose.ui.test.performTextReplacement
 import com.yungmoolah.converter.data.CURRENCY_BY_CODE
 import com.yungmoolah.converter.ui.MoolahScreen
@@ -33,6 +36,15 @@ class ConverterScreenTest {
 
     @get:Rule
     val compose = createComposeRule()
+
+    /** A delete key press that is a repeat, i.e. the key is being held down. */
+    private fun repeatedDelete() = KeyEvent(
+        NativeKeyEvent(0L, 0L, NativeKeyEvent.ACTION_DOWN, NativeKeyEvent.KEYCODE_DEL, 1),
+    )
+
+    private fun singleDelete() = KeyEvent(
+        NativeKeyEvent(0L, 0L, NativeKeyEvent.ACTION_DOWN, NativeKeyEvent.KEYCODE_DEL, 0),
+    )
 
     private fun row(code: String, amount: String, active: Boolean = false, rate: String? = null) =
         CurrencyRowUi(
@@ -114,33 +126,31 @@ class ConverterScreenTest {
     }
 
     @Test
-    fun `only the row being edited offers a clear button`() {
-        compose.setContent { MoolahTheme { MoolahScreen(state) } }
-
-        // One clear button on screen, and it belongs to the active row.
-        compose.onAllNodesWithContentDescription("Clear amount").assertCountEquals(1)
-    }
-
-    @Test
-    fun `the clear button reports the row it belongs to`() {
+    fun `holding the delete key clears the row being edited`() {
         var cleared: String? = null
         compose.setContent { MoolahTheme { MoolahScreen(state, onClear = { cleared = it }) } }
 
-        compose.onNodeWithContentDescription("Clear amount").performClick()
+        compose.onNodeWithContentDescription("US Dollar amount").performClick()
+        compose.onNodeWithContentDescription("US Dollar amount").performKeyPress(repeatedDelete())
 
         assertEquals("USD", cleared)
     }
 
     @Test
-    fun `an empty active row has nothing to clear`() {
-        compose.setContent {
-            MoolahTheme {
-                MoolahScreen(
-                    state.copy(rows = state.rows.map { it.copy(amountText = "") })
-                )
-            }
-        }
+    fun `a single tap of delete is left to the keyboard`() {
+        var cleared: String? = null
+        compose.setContent { MoolahTheme { MoolahScreen(state, onClear = { cleared = it }) } }
 
+        compose.onNodeWithContentDescription("US Dollar amount").performClick()
+        compose.onNodeWithContentDescription("US Dollar amount").performKeyPress(singleDelete())
+
+        // One press deletes a digit through the normal text path, not a wipe.
+        assertEquals(null, cleared)
+    }
+
+    @Test
+    fun `the clear button is gone`() {
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
         compose.onAllNodesWithContentDescription("Clear amount").assertCountEquals(0)
     }
 

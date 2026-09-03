@@ -22,14 +22,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.yungmoolah.converter.domain.formatAmount
+import com.yungmoolah.converter.domain.formatLadderAmount
 import com.yungmoolah.converter.domain.formatWhole
 import com.yungmoolah.converter.ui.theme.MoolahShapes
 import com.yungmoolah.converter.ui.theme.RateLabelStyle
 
 /**
- * How to do each conversion without the app: an approximation you can hold in your
- * head, how far off it is, and a ladder of round amounts to recognise on sight.
+ * How to do each conversion without the app.
+ *
+ * One card per pinned currency, paired with the home currency both ways round, and
+ * a ladder of round amounts for each direction.
  */
 @Composable
 fun ShortcutsList(state: ConverterUiState, modifier: Modifier = Modifier) {
@@ -42,9 +44,18 @@ fun ShortcutsList(state: ConverterUiState, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.fillMaxSize(),
     ) {
-        // Keyed on the foreign currency: the destination is the home one, which is
-        // the same for every card.
-        items(state.shortcuts, key = { it.from.code }) { card -> ShortcutCard(card) }
+        item(key = "caption") {
+            // Says where the home currency comes from, so the tab is not a black box.
+            Text(
+                text = "To and from ${state.homeCode}, the top row on Convert. " +
+                    "Drag a row up there to change it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            )
+        }
+        // Keyed on the foreign currency: the home one is the same on every card.
+        items(state.shortcuts, key = { it.foreign.code }) { card -> ShortcutCard(card) }
     }
 }
 
@@ -58,69 +69,77 @@ private fun ShortcutCard(card: ShortcutCardUi) {
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = card.from.flag, fontSize = 17.sp)
-                Spacer(Modifier.width(6.dp))
+                Text(text = card.foreign.flag, fontSize = 17.sp)
+                Spacer(Modifier.width(7.dp))
                 Text(
-                    text = "${card.from.code} → ${card.to.code}",
+                    text = "${card.foreign.code} ⇄ ${card.home.code}",
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.onSurface,
                 )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "within ${accuracy(card.shortcut.errorPercent)}",
-                    style = RateLabelStyle,
-                    color = colors.onSurfaceVariant,
-                )
+                Spacer(Modifier.width(7.dp))
+                Text(text = card.home.flag, fontSize = 17.sp)
             }
 
-            Spacer(Modifier.height(10.dp))
-            // The recipe is the point of the card, so it gets the emphasis rather
-            // than the multiplier it works out to — nobody multiplies by 0.0068.
-            Text(
-                text = card.shortcut.steps.joinToString(", then "),
-                style = MaterialTheme.typography.headlineSmall,
-                color = colors.primary,
-            )
-
+            Direction(card.toHome)
             Spacer(Modifier.height(14.dp))
             HorizontalDivider(color = colors.outlineVariant)
-            Spacer(Modifier.height(10.dp))
-            Ladder(card)
+            Direction(card.toForeign)
         }
     }
 }
 
 @Composable
-private fun Ladder(card: ShortcutCardUi) {
+private fun Direction(direction: ShortcutDirectionUi) {
     val colors = MaterialTheme.colorScheme
-    // Two columns of three, which fits the common ladder without scrolling.
-    val rows = card.ladder.chunked(2)
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        for (pair in rows) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (rung in pair) {
-                    Row(modifier = Modifier.weight(1f)) {
-                        Text(
-                            // Always a round number, so decimals would be noise.
-                            text = formatWhole(rung.fromAmount),
-                            style = RateLabelStyle,
-                            color = colors.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "→",
-                            style = RateLabelStyle,
-                            color = colors.onSurfaceVariant.copy(alpha = 0.5f),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = formatAmount(rung.toAmount, card.to.code),
-                            style = RateLabelStyle,
-                            color = colors.onSurface,
-                        )
-                    }
-                }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
+    Spacer(Modifier.height(12.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "${direction.from.code} → ${direction.to.code}",
+            style = RateLabelStyle,
+            color = colors.onSurfaceVariant,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "within ${accuracy(direction.shortcut.errorPercent)}",
+            style = RateLabelStyle,
+            color = colors.onSurfaceVariant,
+        )
+    }
+    Spacer(Modifier.height(5.dp))
+    // The recipe is the point of the card, so it gets the emphasis rather than the
+    // multiplier it works out to — nobody multiplies by 0.0068.
+    Text(
+        text = direction.shortcut.steps.joinToString(", then "),
+        style = MaterialTheme.typography.headlineSmall,
+        color = colors.primary,
+    )
+    Spacer(Modifier.height(9.dp))
+    Ladder(direction)
+}
+
+@Composable
+private fun Ladder(direction: ShortcutDirectionUi) {
+    val colors = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (rung in direction.ladder) {
+            Row {
+                Text(
+                    text = "${direction.from.symbol}${formatWhole(rung.fromAmount)}",
+                    style = RateLabelStyle,
+                    color = colors.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    text = "→",
+                    style = RateLabelStyle,
+                    color = colors.onSurfaceVariant.copy(alpha = 0.5f),
+                )
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    text = "${direction.to.symbol}${formatLadderAmount(rung.toAmount, direction.to.code)}",
+                    style = RateLabelStyle,
+                    color = colors.onSurface,
+                )
             }
         }
     }

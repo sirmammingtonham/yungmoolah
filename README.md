@@ -26,8 +26,8 @@ working offline.
   hand.
 - **Pin, reorder, remove.** Add from a searchable list of every supported currency,
   swipe a row away (with undo), long-press and drag one to reorder.
-- **Clear in one tap.** The row being edited carries a clear button; clearing it
-  blanks every row so you can start a new figure.
+- **Hold delete to clear.** Holding the keyboard's delete key wipes the whole
+  amount rather than walking back through it a digit at a time.
 - **Grouped as you type.** The row being edited gains thousands separators
   keystroke by keystroke, and the caret stays at the end wherever you tap.
 - **Tap anywhere else** to drop the highlight and put the keyboard away.
@@ -35,8 +35,9 @@ working offline.
   running total, which is shown under the row you are editing. The system's number
   pad has no operators, so a bar of arithmetic keys appears above it while you type.
 - **A Shortcuts tab** for when the phone stays in your pocket: for each pinned
-  currency, how to convert it into your home currency in your head, and a ladder of
-  round amounts to recognise on sight.
+  currency, how to convert it in your head *both ways* against your home currency,
+  and a ladder of round amounts for each direction. Home is the top row on
+  Convert — drag a row up there to change it.
 
 ## Install
 
@@ -104,14 +105,25 @@ A few decisions worth knowing:
 - **A half-typed sum still has a value.** `evaluateEntry` evaluates the longest
   leading part of the entry that parses, so "120×" is worth 120 and the other rows
   keep up on every keystroke instead of freezing until the sum is finished.
-- **The shortcuts run foreign-to-home**, which is the direction you need in front of
-  a price tag, and their vocabulary is restricted to operations a person can
-  actually do: decimal shifts, halving and doubling, dividing by a single digit,
-  simple fractions, and percentage nudges. `MentalMath` scores candidate recipes on
-  accuracy *plus* effort, with a per-step penalty — without it the search trades a
-  two-step recipe for a three-step one half a percent closer, which is the wrong
-  trade for arithmetic done from memory. Multiplying by 0.83 is never suggested,
-  however close to the rate it lands.
+- **The shortcuts are anchored to the top pinned row**, not to whichever amount is
+  being edited — the tab would otherwise rearrange itself every time you touched a
+  different row. Each card carries both directions, because reading a foreign price
+  tag and working out what to hand over are different sums.
+- **Each direction is searched independently** rather than by inverting the other.
+  The operations are not closed under inversion — undoing "take off 10%" is not
+  "add 10%" — so an inverted recipe would either drift from the rate or reach for
+  arithmetic nobody can do.
+- **The recipe vocabulary is restricted to operations a person can actually do**:
+  decimal shifts, halving and doubling, dividing by a single digit, simple
+  fractions, and percentage nudges. `MentalMath` scores candidates on accuracy
+  *plus* effort, with a per-step penalty — without it the search trades a two-step
+  recipe for a three-step one half a percent closer, which is the wrong trade for
+  arithmetic done from memory. Multiplying by 0.83 is never suggested, however
+  close to the rate it lands.
+- **Holding delete is detected two ways.** The field watches for a repeated
+  backspace key press, which is what most keyboards send; for the ones that delete
+  through the input connection instead, the ViewModel watches the *rate* of
+  single-character deletions, since auto-repeat produces bursts no thumb can.
 - **Rates are stored relative to one base.** Converting between two arbitrary
   currencies is then the ratio of their two rates, which is what lets a single
   edited amount drive every row without touching the network.
@@ -136,7 +148,7 @@ A few decisions worth knowing:
 
 ## Tests
 
-`./gradlew testDebugUnitTest` runs 161 JVM tests — no device or emulator needed,
+`./gradlew testDebugUnitTest` runs 168 JVM tests — no device or emulator needed,
 since the Compose and Android-dependent cases run under Robolectric.
 
 | Suite | Covers |

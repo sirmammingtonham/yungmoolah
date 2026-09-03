@@ -42,13 +42,8 @@ data class CurrencyRowUi(
     val code: String get() = info.code
 }
 
-/**
- * One pair on the shortcuts tab: how to do it in your head, and a ladder of amounts.
- *
- * Always runs foreign-to-home — the direction you need standing in front of a price
- * tag — so [from] is the pinned currency and [to] is the one being edited.
- */
-data class ShortcutCardUi(
+/** One direction of a pair: how to do it in your head, and a ladder of amounts. */
+data class ShortcutDirectionUi(
     val from: CurrencyInfo,
     val to: CurrencyInfo,
     val rate: Double,
@@ -56,11 +51,26 @@ data class ShortcutCardUi(
     val ladder: List<LadderRow>,
 )
 
+/**
+ * One pinned currency paired with the home currency, both ways round.
+ *
+ * Reading a foreign price tag and working out what to hand over are different
+ * sums, and people need both, so a card carries a recipe for each direction.
+ */
+data class ShortcutCardUi(
+    val foreign: CurrencyInfo,
+    val home: CurrencyInfo,
+    val toHome: ShortcutDirectionUi,
+    val toForeign: ShortcutDirectionUi,
+)
+
 data class ConverterUiState(
     val rows: List<CurrencyRowUi> = emptyList(),
     /** Populated only while the entry is arithmetic, e.g. "= 3,750". */
     val expressionResult: String? = null,
     val shortcuts: List<ShortcutCardUi> = emptyList(),
+    /** The currency the shortcuts convert to and from: the top row on Convert. */
+    val homeCode: String = "",
     val activeCode: String = "",
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
@@ -84,13 +94,21 @@ private data class SyncState(
     val message: String? = null,
 )
 
-class ConverterViewModel(private val repository: RatesRepository) : ViewModel() {
+class ConverterViewModel(
+    private val repository: RatesRepository,
+    /** Injectable so the held-delete detection below can be tested on a fake clock. */
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+) : ViewModel() {
 
     private val editor = MutableStateFlow(EditorState())
     private val sync = MutableStateFlow(SyncState())
 
     /** Backs the "undo" action after a swipe-to-remove. */
     private var lastRemoved: Pair<Int, String>? = null
+
+    /** State for spotting a held delete key; see [registerDeletion]. */
+    private var lastDeletionAt = 0L
+    private var runOfFastDeletions = 0
 
     val uiState: StateFlow<ConverterUiState> = combine(
         repository.snapshot,
@@ -130,8 +148,34 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
             state.rows.firstOrNull { it.code == code }?.amountText?.replace(",", "").orEmpty()
         }
         val edited = editAmount(raw = raw, oldDisplay = groupForEditing(raw), newDisplay = proposed)
+
+        if (edited.length < raw.length && registerDeletion()) {
+            clearAmount(code)
+            return
+        }
         editor.update { it.copy(activeCode = code, input = edited) }
         if (state.activeCode != code) persistActive(code)
+    }
+
+    /**
+     * Notes a single-character deletion and reports whether the delete key is being
+     * held down.
+     *
+     * A backstop for the keyboards that delete through the input connection rather
+     * than by sending key events, where the field never sees a repeated key press.
+     * What it can always see is the *rate*: a person tapping delete cannot produce
+     * four deletions [FAST_DELETION_WINDOW_MS] apart, but auto-repeat does nothing
+     * else.
+     */
+    private fun registerDeletion(): Boolean {
+        val now = nowMillis()
+        runOfFastDeletions = if (now - lastDeletionAt <= FAST_DELETION_WINDOW_MS) {
+            runOfFastDeletions + 1
+        } else {
+            1
+        }
+        lastDeletionAt = now
+        return runOfFastDeletions >= FAST_DELETIONS_TO_CLEAR
     }
 
     /**
@@ -160,6 +204,8 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
      * is looking at even if focus had moved on.
      */
     fun clearAmount(code: String) {
+        // Reset the run, or holding delete again straight after would clear at once.
+        runOfFastDeletions = 0
         editor.update { it.copy(activeCode = code, input = "") }
         if (uiState.value.activeCode != code) persistActive(code)
     }
@@ -284,7 +330,8 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
         return ConverterUiState(
             rows = rows,
             expressionResult = expressionResultOf(editorState.input, activeCode),
-            shortcuts = shortcutsFor(snapshot, pinned, activeCode),
+            shortcuts = shortcutsFor(snapshot, pinned),
+            homeCode = pinned.firstOrNull().orEmpty(),
             activeCode = activeCode,
             isLoading = snapshot == null && syncState.isRefreshing,
             isRefreshing = syncState.isRefreshing,
@@ -303,26 +350,54 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
         return "= ${formatAmount(value, code)}"
     }
 
+    /**
+     * Builds the shortcuts tab from the pinned list, taking the top row as home.
+     *
+     * Home is deliberately the first pinned currency rather than whichever row is
+     * being edited: the tab would otherwise rearrange itself under the user every
+     * time they touched a different amount. Dragging a row to the top is how you
+     * change it, which is the same gesture that already orders the main page.
+     */
     private fun shortcutsFor(
         snapshot: RatesSnapshot?,
         pinned: List<String>,
-        activeCode: String,
     ): List<ShortcutCardUi> {
         if (snapshot == null) return emptyList()
-        val home = CURRENCY_BY_CODE[activeCode] ?: return emptyList()
-        return pinned.mapNotNull { code ->
-            if (code == activeCode) return@mapNotNull null
+        val home = pinned.firstOrNull()?.let { CURRENCY_BY_CODE[it] } ?: return emptyList()
+
+        return pinned.drop(1).mapNotNull { code ->
             val foreign = CURRENCY_BY_CODE[code] ?: return@mapNotNull null
-            val rate = unitRate(code, activeCode, snapshot) ?: return@mapNotNull null
-            val shortcut = mentalShortcut(rate) ?: return@mapNotNull null
+            val toHomeRate = unitRate(foreign.code, home.code, snapshot) ?: return@mapNotNull null
+            val toForeignRate = unitRate(home.code, foreign.code, snapshot) ?: return@mapNotNull null
             ShortcutCardUi(
-                from = foreign,
-                to = home,
-                rate = rate,
-                shortcut = shortcut,
-                ladder = ladderFor(rate),
+                foreign = foreign,
+                home = home,
+                toHome = direction(foreign, home, toHomeRate) ?: return@mapNotNull null,
+                toForeign = direction(home, foreign, toForeignRate) ?: return@mapNotNull null,
             )
         }
+    }
+
+    /**
+     * Each direction is searched on its own rather than by inverting the other.
+     *
+     * The operations are not closed under inversion — undoing "take off 10%" is not
+     * "add 10%" — so inverting a recipe would either drift or reach for arithmetic
+     * nobody can do. Searching twice costs nothing and keeps both sides easy.
+     */
+    private fun direction(
+        from: CurrencyInfo,
+        to: CurrencyInfo,
+        rate: Double,
+    ): ShortcutDirectionUi? {
+        val shortcut = mentalShortcut(rate) ?: return null
+        return ShortcutDirectionUi(from, to, rate, shortcut, ladderFor(rate))
+    }
+
+    private companion object {
+        /** Auto-repeat fires roughly every 50ms; no thumb manages four taps this fast. */
+        const val FAST_DELETION_WINDOW_MS = 120L
+        const val FAST_DELETIONS_TO_CLEAR = 4
     }
 
     class Factory(private val repository: RatesRepository) : ViewModelProvider.Factory {

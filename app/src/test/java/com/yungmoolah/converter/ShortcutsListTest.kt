@@ -1,12 +1,10 @@
 package com.yungmoolah.converter
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import com.yungmoolah.converter.data.CURRENCY_BY_CODE
-import com.yungmoolah.converter.domain.ladderFor
-import com.yungmoolah.converter.domain.mentalShortcut
 import com.yungmoolah.converter.ui.ConverterUiState
-import com.yungmoolah.converter.ui.ShortcutCardUi
 import com.yungmoolah.converter.ui.ShortcutsList
 import com.yungmoolah.converter.ui.theme.MoolahTheme
 import org.junit.Rule
@@ -22,17 +20,6 @@ class ShortcutsListTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun card(code: String, perDollar: Double): ShortcutCardUi {
-        val rate = 1.0 / perDollar
-        return ShortcutCardUi(
-            from = CURRENCY_BY_CODE.getValue(code),
-            to = CURRENCY_BY_CODE.getValue("USD"),
-            rate = rate,
-            shortcut = mentalShortcut(rate)!!,
-            ladder = ladderFor(rate),
-        )
-    }
-
     /**
      * Regression: the list was keyed on the destination currency, which is the home
      * one on every card, so a second card crashed the tab with a duplicate key.
@@ -40,7 +27,12 @@ class ShortcutsListTest {
     @Test
     fun `several pairs render together`() {
         val state = ConverterUiState(
-            shortcuts = listOf(card("EUR", 0.9142), card("JPY", 147.2), card("GBP", 0.7891)),
+            shortcuts = listOf(
+                shortcutCard("EUR", 0.9142),
+                shortcutCard("JPY", 147.2),
+                shortcutCard("GBP", 0.7891),
+            ),
+            homeCode = "USD",
             ratesUpdatedAtMillis = System.currentTimeMillis(),
         )
         compose.setContent { MoolahTheme { ShortcutsList(state) } }
@@ -51,18 +43,42 @@ class ShortcutsListTest {
     }
 
     @Test
-    fun `each card shows its recipe, its accuracy and its ladder`() {
+    fun `a card shows both directions, each with its own recipe and ladder`() {
         val state = ConverterUiState(
-            shortcuts = listOf(card("JPY", 147.2)),
+            shortcuts = listOf(shortcutCard("JPY", 147.2)),
+            homeCode = "USD",
             ratesUpdatedAtMillis = System.currentTimeMillis(),
         )
         compose.setContent { MoolahTheme { ShortcutsList(state) } }
 
+        compose.onNodeWithText("JPY ⇄ USD").assertExists()
+
+        // Reading a price tag.
+        compose.onNodeWithText("JPY → USD").assertExists()
         compose.onNodeWithText("drop 2 zeros, then take off a third").assertExists()
-        compose.onNodeWithText("within 1.9%").assertExists()
-        // The ladder is denominated in the foreign currency people see on a price tag.
-        compose.onNodeWithText("1,000").assertExists()
-        compose.onNodeWithText("6.79").assertExists()
+        compose.onNodeWithText("¥1,000").assertExists()
+        compose.onNodeWithText("$6.79").assertExists()
+
+        // Working out what to hand over.
+        compose.onNodeWithText("USD → JPY").assertExists()
+        compose.onNodeWithText("$10").assertExists()
+        compose.onNodeWithText("¥1,472").assertExists()
+
+        // Each direction states how far off its own recipe is.
+        compose.onAllNodesWithText("within", substring = true).assertCountEquals(2)
+    }
+
+    @Test
+    fun `the tab says where the home currency comes from`() {
+        val state = ConverterUiState(
+            shortcuts = listOf(shortcutCard("JPY", 147.2)),
+            homeCode = "USD",
+            ratesUpdatedAtMillis = System.currentTimeMillis(),
+        )
+        compose.setContent { MoolahTheme { ShortcutsList(state) } }
+
+        compose.onNodeWithText("To and from USD", substring = true).assertExists()
+        compose.onNodeWithText("top row on Convert", substring = true).assertExists()
     }
 
     @Test

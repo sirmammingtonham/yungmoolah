@@ -183,17 +183,20 @@ private fun shiftStep(shift: Int): String? = when {
 }
 
 /**
- * Round amounts in the foreign currency, chosen so the converted column lands in
- * roughly the 1-to-100 range you deal with day to day: hundreds of yen, not tenths.
+ * Round amounts to convert, scaled so the converted column lands in roughly the
+ * 1-to-100 range you deal with day to day: hundreds of yen, not tenths.
+ *
+ * Powers of ten only. They are the rungs you can scale between without thinking,
+ * and both directions of a pair have to fit on one card.
  */
 fun ladderAmounts(rate: Double): List<Double> {
     if (!rate.isFinite() || rate <= 0.0) return emptyList()
-    // One unit of `base` is worth about one unit at home.
+    // One unit of `base` is worth about one unit of the destination currency.
     val base = 10.0.pow(log10(1.0 / rate).roundToInt()).coerceIn(1.0, 1_000_000.0)
-    return listOf(1.0, 5.0, 10.0, 20.0, 50.0, 100.0).map { it * base }
+    return listOf(1.0, 10.0, 100.0).map { it * base }
 }
 
-/** The ladder for one currency pair. */
+/** The ladder for one direction of a currency pair. */
 fun ladderFor(rate: Double): List<LadderRow> =
     ladderAmounts(rate).map { LadderRow(it, it * rate) }
 

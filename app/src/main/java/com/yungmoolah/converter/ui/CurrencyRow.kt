@@ -19,10 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,6 +37,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
@@ -51,9 +54,6 @@ import androidx.compose.ui.unit.sp
 import com.yungmoolah.converter.ui.theme.AmountTextStyle
 import com.yungmoolah.converter.ui.theme.MoolahShapes
 import com.yungmoolah.converter.ui.theme.RateLabelStyle
-
-/** Width of the clear-button column, reserved on every row so amounts stay aligned. */
-private val ClearSlotWidth = 32.dp
 
 /**
  * One pinned currency: flag and identity on the left, an editable amount on the right.
@@ -113,7 +113,7 @@ fun CurrencyRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .heightIn(min = 64.dp)
-                .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -158,6 +158,7 @@ fun CurrencyRow(
                     focusRequester = focusRequester,
                     onValueChange = onAmountChanged,
                     onFocusChanged = onFocusChanged,
+                    onClear = onClear,
                 )
                 row.rateLabel?.let { label ->
                     Spacer(Modifier.height(3.dp))
@@ -167,24 +168,6 @@ fun CurrencyRow(
                         color = colors.onSurfaceVariant,
                         maxLines = 1,
                     )
-                }
-            }
-
-            // Reserved on every row, filled only on the one being edited, so the
-            // amounts stay in one column instead of shifting as focus moves.
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.width(ClearSlotWidth),
-            ) {
-                if (row.isActive && row.amountText.isNotEmpty()) {
-                    IconButton(onClick = onClear, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "Clear amount",
-                            tint = colors.onSecondaryContainer.copy(alpha = 0.7f),
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
                 }
             }
         }
@@ -208,6 +191,7 @@ private fun AmountField(
     focusRequester: FocusRequester,
     onValueChange: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
+    onClear: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     var field by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
@@ -238,7 +222,17 @@ private fun AmountField(
             .fillMaxWidth()
             .focusRequester(focusRequester)
             .onFocusChanged { onFocusChanged(it.isFocused) }
-            .semantics { this.contentDescription = contentDescription },
+            .semantics { this.contentDescription = contentDescription }
+            // Holding the keyboard's delete key wipes the whole amount rather than
+            // walking back through it a digit at a time. The first *repeat* of the
+            // key press is the signal, and consuming it stops the per-digit deletes.
+            .onPreviewKeyEvent { event ->
+                val heldDown = event.type == KeyEventType.KeyDown &&
+                    event.key == Key.Backspace &&
+                    event.nativeKeyEvent.repeatCount > 0
+                if (heldDown) onClear()
+                heldDown
+            },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterEnd) {
                 if (text.isEmpty()) {

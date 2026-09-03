@@ -50,6 +50,9 @@ class ConverterViewModelTest {
     val tempFolder = TemporaryFolder()
 
     private val dispatcher = StandardTestDispatcher()
+
+    /** Drives the held-delete detection, which is a question of timing. */
+    private var clock = 1_000_000L
     private val storeScope = CoroutineScope(dispatcher + SupervisorJob())
     private lateinit var server: MockWebServer
     private lateinit var dataStore: DataStore<Preferences>
@@ -65,6 +68,7 @@ class ConverterViewModelTest {
             scope = storeScope,
             produceFile = { tempFolder.newFile("moolah.preferences_pb").also { it.delete() } },
         )
+        clock = 1_000_000L
         repository = RatesRepository(
             store = RatesStore(dataStore),
             api = RatesApi(
@@ -291,6 +295,60 @@ class ConverterViewModelTest {
     }
 
     @Test
+    fun `holding the delete key clears the whole amount`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "123456")
+        advanceUntilIdle()
+
+        // Auto-repeat: deletions arriving far faster than a thumb can tap.
+        repeat(4) {
+            clock += 50
+            backspace(state)
+            advanceUntilIdle()
+        }
+
+        assertEquals("", state().rows.first { it.code == "USD" }.amountText)
+    }
+
+    @Test
+    fun `tapping delete at a human pace still removes one digit at a time`() =
+        runTest(dispatcher) {
+            server.enqueue(MockResponse().setBody(ratesBody()))
+            val state = collectState()
+
+            viewModel.onAmountChanged("USD", "123456")
+            advanceUntilIdle()
+
+            repeat(4) {
+                clock += 300
+                backspace(state)
+                advanceUntilIdle()
+            }
+
+            assertEquals("12", state().rows.first { it.code == "USD" }.amountText)
+        }
+
+    @Test
+    fun `a burst of deletions has to be a run to count as a held key`() =
+        runTest(dispatcher) {
+            server.enqueue(MockResponse().setBody(ratesBody()))
+            val state = collectState()
+
+            viewModel.onAmountChanged("USD", "123456")
+            advanceUntilIdle()
+
+            // Three quick deletions, then a pause, then three more: never four in a
+            // row, so this stays six single-digit deletions rather than a clear.
+            repeat(3) { clock += 40; backspace(state); advanceUntilIdle() }
+            clock += 900
+            repeat(3) { clock += 40; backspace(state); advanceUntilIdle() }
+
+            assertEquals("", state().rows.first { it.code == "USD" }.amountText)
+        }
+
+    @Test
     fun `clearing a sum empties the field`() = runTest(dispatcher) {
         server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
@@ -307,31 +365,76 @@ class ConverterViewModelTest {
     // --- shortcuts tab --------------------------------------------------------
 
     @Test
-    fun `shortcuts run from each pinned currency into the one being edited`() = runTest(dispatcher) {
+    fun `shortcuts run between each pinned currency and the top row, both ways`() =
+        runTest(dispatcher) {
+            server.enqueue(MockResponse().setBody(ratesBody()))
+            val state = collectState()
+            advanceUntilIdle()
+
+            // USD is the top pinned row, so it is home; every other row gets a card.
+            assertEquals("USD", state().homeCode)
+            assertEquals(listOf("EUR", "GBP", "JPY", "INR"), state().shortcuts.map { it.foreign.code })
+            assertTrue(state().shortcuts.all { it.home.code == "USD" })
+
+            val euro = state().shortcuts.first()
+            // Reading a price tag: 1 EUR is worth 1/0.9142 USD.
+            assertEquals("EUR", euro.toHome.from.code)
+            assertEquals("USD", euro.toHome.to.code)
+            assertEquals(1.0 / 0.9142, euro.toHome.rate, 1e-9)
+            assertEquals(listOf("add 10%"), euro.toHome.shortcut.steps)
+
+            // And the other way, for working out what to hand over.
+            assertEquals("USD", euro.toForeign.from.code)
+            assertEquals("EUR", euro.toForeign.to.code)
+            assertEquals(0.9142, euro.toForeign.rate, 1e-9)
+            assertTrue(euro.toForeign.shortcut.steps.isNotEmpty())
+        }
+
+    @Test
+    fun `the shortcuts do not move when a different row is edited`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+        advanceUntilIdle()
+        val before = state().shortcuts.map { it.foreign.code } to state().homeCode
+
+        // Editing is not how home is chosen; the tab would otherwise rearrange
+        // itself every time an amount was touched.
+        viewModel.onRowFocused("JPY")
+        advanceUntilIdle()
+        viewModel.onAmountChanged("JPY", "5000")
+        advanceUntilIdle()
+
+        assertEquals(before, state().shortcuts.map { it.foreign.code } to state().homeCode)
+    }
+
+    @Test
+    fun `dragging a row to the top makes it the home currency`() = runTest(dispatcher) {
         server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
         advanceUntilIdle()
 
-        // The direction that matters standing at a till abroad: foreign -> home.
-        assertEquals(listOf("EUR", "GBP", "JPY", "INR"), state().shortcuts.map { it.from.code })
-        assertTrue(state().shortcuts.all { it.to.code == "USD" })
-        // 1 EUR is worth 1/0.9142 USD.
-        assertEquals(1.0 / 0.9142, state().shortcuts.first().rate, 1e-9)
-        assertEquals(listOf("add 10%"), state().shortcuts.first().shortcut.steps)
+        // JPY sits at index 3; dragging it to the top is how home is changed.
+        viewModel.moveCurrency(3, 0)
+        advanceUntilIdle()
+
+        assertEquals("JPY", state().homeCode)
+        assertTrue(state().shortcuts.all { it.home.code == "JPY" })
+        assertEquals(listOf("USD", "EUR", "GBP", "INR"), state().shortcuts.map { it.foreign.code })
     }
 
     @Test
-    fun `switching the row being edited switches what the shortcuts convert into`() =
-        runTest(dispatcher) {
-            server.enqueue(MockResponse().setBody(ratesBody()))
-            val state = collectState()
+    fun `both ladders are denominated for the direction they describe`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+        advanceUntilIdle()
 
-            viewModel.onRowFocused("EUR")
-            advanceUntilIdle()
-
-            assertTrue(state().shortcuts.all { it.to.code == "EUR" })
-            assertTrue(state().shortcuts.none { it.from.code == "EUR" })
-        }
+        val yen = state().shortcuts.first { it.foreign.code == "JPY" }
+        // Yen are worth little each, so its ladder starts in the hundreds.
+        assertEquals(100.0, yen.toHome.ladder.first().fromAmount, 1e-9)
+        // Dollars are not, so the other direction starts at one.
+        assertEquals(1.0, yen.toForeign.ladder.first().fromAmount, 1e-9)
+        assertEquals(147.2, yen.toForeign.ladder.first().toAmount, 1e-6)
+    }
 
     @Test
     fun `there are no shortcuts before any rates arrive`() = runTest(dispatcher) {
@@ -584,11 +687,17 @@ class ConverterViewModelTest {
      */
     private fun TestScope.collectState(newViewModel: Boolean = true): () -> ConverterUiState {
         if (newViewModel || !this@ConverterViewModelTest::viewModel.isInitialized) {
-            viewModel = ConverterViewModel(repository)
+            viewModel = ConverterViewModel(repository, nowMillis = { clock })
         }
         backgroundScope.launch { viewModel.uiState.collect { } }
         advanceUntilIdle()
         return { viewModel.uiState.value }
+    }
+
+    /** Deletes the last character of the active row, as the keyboard would. */
+    private fun backspace(state: () -> ConverterUiState) {
+        val row = state().rows.first { it.isActive }
+        viewModel.onAmountChanged(row.code, row.amountText.dropLast(1))
     }
 
     /**
