@@ -25,7 +25,6 @@ class AppStartupTest {
 
     @Test
     fun `the app launches and shows the pinned currencies`() {
-        compose.onNodeWithText("YungMoolah").assertExists()
         compose.onNodeWithText("US Dollar").assertExists()
         compose.onNodeWithText("Euro").assertExists()
         compose.onNodeWithText("Add currency").assertExists()

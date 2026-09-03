@@ -9,11 +9,12 @@ import com.yungmoolah.converter.data.RatesRepository
 import com.yungmoolah.converter.data.RatesSnapshot
 import com.yungmoolah.converter.data.RefreshResult
 import com.yungmoolah.converter.domain.convert
+import com.yungmoolah.converter.domain.editAmount
+import com.yungmoolah.converter.domain.groupForEditing
 import com.yungmoolah.converter.domain.formatAmount
 import com.yungmoolah.converter.domain.formatForEditing
 import com.yungmoolah.converter.domain.formatRate
 import com.yungmoolah.converter.domain.parseAmount
-import com.yungmoolah.converter.domain.sanitizeAmountInput
 import com.yungmoolah.converter.domain.unitRate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -92,12 +93,22 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
         }
     }
 
-    /** Called on every keystroke in any row's amount field. */
+    /**
+     * Called on every keystroke in any row's amount field.
+     *
+     * [proposed] is the *displayed* text, separators and all; the raw entry behind
+     * it is recovered by [editAmount].
+     */
     fun onAmountChanged(code: String, proposed: String) {
         val state = uiState.value
-        val current = state.rows.firstOrNull { it.code == code }?.amountText.orEmpty()
-        val sanitized = sanitizeAmountInput(proposed, current)
-        editor.update { it.copy(activeCode = code, input = sanitized) }
+        val raw = if (state.activeCode == code) {
+            editor.value.input
+        } else {
+            // Typing into a row that was not active: seed from what it was showing.
+            state.rows.firstOrNull { it.code == code }?.amountText?.replace(",", "").orEmpty()
+        }
+        val edited = editAmount(raw = raw, oldDisplay = groupForEditing(raw), newDisplay = proposed)
+        editor.update { it.copy(activeCode = code, input = edited) }
         if (state.activeCode != code) persistActive(code)
     }
 
@@ -169,12 +180,19 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
         }
     }
 
-    /** Long-pressing a row promotes it, so the currency you care about stays in reach. */
-    fun moveToTop(code: String) {
+    /**
+     * Moves the row at [from] to [to], for long-press drag reordering.
+     *
+     * Out-of-range indices are ignored rather than clamped: the drag can pass over
+     * the trailing "add currency" tile, and clamping would silently drop the row in
+     * the wrong place.
+     */
+    fun moveCurrency(from: Int, to: Int) {
+        if (from == to) return
         viewModelScope.launch {
             val pinned = repository.pinned.first()
-            if (pinned.firstOrNull() == code || !pinned.contains(code)) return@launch
-            repository.setPinned(listOf(code) + (pinned - code))
+            if (from !in pinned.indices || to !in pinned.indices) return@launch
+            repository.setPinned(pinned.toMutableList().apply { add(to, removeAt(from)) })
         }
     }
 
@@ -225,7 +243,7 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
             val info = CURRENCY_BY_CODE[code] ?: return@mapNotNull null
             val isActive = code == activeCode
             val amountText = when {
-                isActive -> editorState.input
+                isActive -> groupForEditing(editorState.input)
                 blankInput || snapshot == null -> ""
                 else -> convert(amount, activeCode, code, snapshot)?.let { formatAmount(it, code) } ?: ""
             }

@@ -84,7 +84,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `editing one amount recomputes every other pinned row`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         // Default pins are USD, EUR, GBP, JPY, INR with USD active and "1" seeded.
@@ -105,7 +105,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `editing a different row makes it the source and converts the other way`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         viewModel.onAmountChanged("JPY", "1000")
@@ -113,7 +113,8 @@ class ConverterViewModelTest {
 
         val rows = state().rows.associateBy { it.code }
         assertEquals("JPY", state().activeCode)
-        assertEquals("1000", rows.getValue("JPY").amountText)
+        // The row being edited is grouped as it is typed.
+        assertEquals("1,000", rows.getValue("JPY").amountText)
         // 1000 JPY / 147.2 = 6.79 USD
         assertEquals("6.79", rows.getValue("USD").amountText)
         assertEquals("6.21", rows.getValue("EUR").amountText)
@@ -121,7 +122,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `focusing a row seeds it with the amount already displayed`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         viewModel.onAmountChanged("USD", "100")
@@ -139,7 +140,7 @@ class ConverterViewModelTest {
     @Test
     fun `clearing the active field blanks the others rather than showing stale numbers`() =
         runTest(dispatcher) {
-            server.enqueue(MockResponse().setBody(RATES_BODY))
+            server.enqueue(MockResponse().setBody(ratesBody()))
             val state = collectState()
 
             viewModel.onAmountChanged("USD", "")
@@ -150,7 +151,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `clearing empties every row and leaves the row ready to type into`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         viewModel.onAmountChanged("USD", "100")
@@ -172,7 +173,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `clearing a row that was not active takes over the editing`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         viewModel.onAmountChanged("USD", "100")
@@ -186,8 +187,48 @@ class ConverterViewModelTest {
     }
 
     @Test
+    fun `the row being edited gains separators as it is typed`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        // Each keystroke appends to whatever the field is showing, separators and
+        // all, exactly as the text field hands it back.
+        fun typeInto(code: String, keys: String) {
+            for (key in keys) {
+                val shown = state().rows.first { it.code == code }.amountText
+                viewModel.onAmountChanged(code, shown + key)
+                advanceUntilIdle()
+            }
+        }
+
+        viewModel.clearAmount("USD")
+        advanceUntilIdle()
+        typeInto("USD", "1234567")
+
+        assertEquals("1,234,567", state().rows.first { it.code == "USD" }.amountText)
+        // The conversion uses the number, not the text on screen.
+        assertEquals("1,128,641.15", state().rows.first { it.code == "EUR" }.amountText)
+    }
+
+    @Test
+    fun `backspacing across a separator removes one digit`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "1000")
+        advanceUntilIdle()
+        assertEquals("1,000", state().rows.first { it.code == "USD" }.amountText)
+
+        val shown = state().rows.first { it.code == "USD" }.amountText
+        viewModel.onAmountChanged("USD", shown.dropLast(1))
+        advanceUntilIdle()
+
+        assertEquals("100", state().rows.first { it.code == "USD" }.amountText)
+    }
+
+    @Test
     fun `rejected keystrokes leave the amount untouched`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         viewModel.onAmountChanged("USD", "12")
@@ -200,7 +241,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `each row reports its own unit rate`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
         advanceUntilIdle()
 
@@ -213,7 +254,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `adding a currency pins it and it converts immediately`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         viewModel.onAmountChanged("USD", "100")
@@ -227,7 +268,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `removing a currency drops it and undo puts it back in place`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
         advanceUntilIdle()
 
@@ -242,7 +283,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `the last currency cannot be removed`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
         advanceUntilIdle()
 
@@ -259,7 +300,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `removing the active row hands editing to another one`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
 
         viewModel.onAmountChanged("GBP", "50")
@@ -274,20 +315,56 @@ class ConverterViewModelTest {
     }
 
     @Test
-    fun `long-pressing a row moves it to the top`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+    fun `dragging a row to a new position reorders the list`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
         advanceUntilIdle()
 
-        viewModel.moveToTop("JPY")
+        // JPY (index 3) dragged to the top.
+        viewModel.moveCurrency(3, 0)
+        advanceUntilIdle()
+        assertEquals(listOf("JPY", "USD", "EUR", "GBP", "INR"), state().rows.map { it.code })
+
+        // and back down one place.
+        viewModel.moveCurrency(0, 1)
+        advanceUntilIdle()
+        assertEquals(listOf("USD", "JPY", "EUR", "GBP", "INR"), state().rows.map { it.code })
+    }
+
+    @Test
+    fun `a drag past the end of the list is ignored`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+        advanceUntilIdle()
+        val before = state().rows.map { it.code }
+
+        // The drag can travel over the trailing "add currency" tile and the footer.
+        viewModel.moveCurrency(0, 5)
+        advanceUntilIdle()
+        viewModel.moveCurrency(0, 99)
+        advanceUntilIdle()
+        viewModel.moveCurrency(-1, 0)
         advanceUntilIdle()
 
-        assertEquals(listOf("JPY", "USD", "EUR", "GBP", "INR"), state().rows.map { it.code })
+        assertEquals(before, state().rows.map { it.code })
+    }
+
+    @Test
+    fun `a reordered list survives a relaunch`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        collectState()
+        advanceUntilIdle()
+
+        viewModel.moveCurrency(3, 0)
+        advanceUntilIdle()
+
+        val relaunched = collectState()
+        assertEquals(listOf("JPY", "USD", "EUR", "GBP", "INR"), relaunched().rows.map { it.code })
     }
 
     @Test
     fun `rates are cached so a later launch works with no network`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         collectState()
         advanceUntilIdle()
 
@@ -311,8 +388,8 @@ class ConverterViewModelTest {
 
     @Test
     fun `an expired cache with no network still converts, flagged offline`() = runTest(dispatcher) {
-        // A snapshot the provider has already superseded.
-        server.enqueue(MockResponse().setBody(RATES_BODY.replace("1788393781", "1")))
+        // A snapshot whose next-update time has already gone by.
+        server.enqueue(MockResponse().setBody(ratesBody(nextUpdateInSeconds = -3600)))
         collectState()
         advanceUntilIdle()
         assertNotNull(repository.snapshot.first())
@@ -330,7 +407,7 @@ class ConverterViewModelTest {
 
     @Test
     fun `a failed refresh keeps the cached rates instead of clearing them`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
         advanceUntilIdle()
         assertFalse(state().isOffline)
@@ -347,13 +424,13 @@ class ConverterViewModelTest {
 
     @Test
     fun `a forced refresh picks up new rates`() = runTest(dispatcher) {
-        server.enqueue(MockResponse().setBody(RATES_BODY))
+        server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
         viewModel.onAmountChanged("USD", "100")
         advanceUntilIdle()
         assertEquals("91.42", state().rows.first { it.code == "EUR" }.amountText)
 
-        server.enqueue(MockResponse().setBody(RATES_BODY.replace("0.9142", "1.5")))
+        server.enqueue(MockResponse().setBody(ratesBody(eur = "1.5")))
         viewModel.refresh(force = true)
         advanceUntilIdle()
 
@@ -398,11 +475,23 @@ class ConverterViewModelTest {
         return { viewModel.uiState.value }
     }
 
-    private companion object {
-        val RATES_BODY = """
+    /**
+     * A rates payload timed relative to now.
+     *
+     * The timestamps have to move with the clock: a snapshot is stale once the
+     * provider's next-update time has passed, so a fixture with a hard-coded time
+     * quietly changes meaning — and these tests' outcome — once that date goes by.
+     */
+    private fun ratesBody(
+        nextUpdateInSeconds: Long = 24 * 60 * 60,
+        eur: String = "0.9142",
+    ): String {
+        val nowSeconds = System.currentTimeMillis() / 1000
+        return """
             {"result":"success","base_code":"USD",
-             "time_last_update_unix":1788307351,"time_next_update_unix":1788393781,
-             "rates":{"USD":1,"EUR":0.9142,"GBP":0.7891,"JPY":147.2,"INR":88.4,"CAD":1.375}}
+             "time_last_update_unix":${nowSeconds - 3600},
+             "time_next_update_unix":${nowSeconds + nextUpdateInSeconds},
+             "rates":{"USD":1,"EUR":$eur,"GBP":0.7891,"JPY":147.2,"INR":88.4,"CAD":1.375}}
         """.trimIndent()
     }
 }

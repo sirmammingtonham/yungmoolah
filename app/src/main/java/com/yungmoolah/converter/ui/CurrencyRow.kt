@@ -1,8 +1,10 @@
 package com.yungmoolah.converter.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,8 +27,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -34,12 +39,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +61,9 @@ private val ClearSlotWidth = 32.dp
  * Every row is a live text field. Typing in any of them makes it the source and
  * recomputes the others, which is the whole interaction model of the app — there
  * is no separate "from" and "to" picker.
+ *
+ * @param dragHandle applied to the identity block, so a long press there starts a
+ *   reorder drag while the amount keeps its own touch handling.
  */
 @Composable
 fun CurrencyRow(
@@ -64,15 +71,19 @@ fun CurrencyRow(
     onAmountChanged: (String) -> Unit,
     onFocused: () -> Unit,
     onClear: () -> Unit,
-    onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
+    dragHandle: Modifier = Modifier,
+    isDragging: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     val focusRequester = remember { FocusRequester() }
-    val haptics = LocalHapticFeedback.current
 
     val containerColor by animateColorAsState(
-        targetValue = if (row.isActive) colors.secondaryContainer else colors.surfaceContainer,
+        targetValue = when {
+            isDragging -> colors.surfaceContainerHigh
+            row.isActive -> colors.secondaryContainer
+            else -> colors.surfaceContainer
+        },
         label = "rowContainer",
     )
     // Inactive rows are flat fills; only the row being edited is outlined, so the
@@ -81,13 +92,22 @@ fun CurrencyRow(
         targetValue = if (row.isActive) colors.primary else Color.Transparent,
         label = "rowBorder",
     )
+    val elevation by animateDpAsState(if (isDragging) 8.dp else 0.dp, label = "rowElevation")
 
     Surface(
         color = containerColor,
         shape = MoolahShapes.Card,
+        shadowElevation = elevation,
         modifier = modifier
             .fillMaxWidth()
-            .border(width = 1.dp, color = borderColor, shape = MoolahShapes.Card),
+            .border(width = 1.dp, color = borderColor, shape = MoolahShapes.Card)
+            // Tapping anywhere on the row starts editing it, so the target is the
+            // whole card rather than just the digits.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { focusRequester.requestFocus() },
+            ),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -95,21 +115,9 @@ fun CurrencyRow(
                 .heightIn(min = 64.dp)
                 .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         ) {
-            // The identity block doubles as the row's gesture target: tapping it moves
-            // focus to the amount, long-pressing promotes the row to the top.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .width(140.dp)
-                    .pointerInput(row.code) {
-                        detectTapGestures(
-                            onTap = { focusRequester.requestFocus() },
-                            onLongPress = {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onLongPress()
-                            },
-                        )
-                    },
+                modifier = Modifier.width(140.dp).then(dragHandle),
             ) {
                 Text(text = row.info.flag, fontSize = 22.sp)
                 Spacer(Modifier.width(12.dp))
@@ -143,37 +151,13 @@ fun CurrencyRow(
                 horizontalAlignment = Alignment.End,
                 modifier = Modifier.weight(1f),
             ) {
-                BasicTextField(
-                    value = row.amountText,
+                AmountField(
+                    text = row.amountText,
+                    isActive = row.isActive,
+                    contentDescription = "${row.info.name} amount",
+                    focusRequester = focusRequester,
                     onValueChange = onAmountChanged,
-                    singleLine = true,
-                    textStyle = AmountTextStyle.copy(
-                        color = if (row.isActive) colors.onSecondaryContainer else colors.onSurface,
-                        textAlign = TextAlign.End,
-                        fontSize = amountFontSize(row.amountText.length),
-                    ),
-                    cursorBrush = SolidColor(colors.primary),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { if (it.isFocused) onFocused() }
-                        .semantics { contentDescription = "${row.info.name} amount" },
-                    decorationBox = { inner ->
-                        Box(contentAlignment = Alignment.CenterEnd) {
-                            if (row.amountText.isEmpty()) {
-                                Text(
-                                    text = "0",
-                                    style = AmountTextStyle.copy(
-                                        color = colors.onSurfaceVariant.copy(alpha = 0.35f),
-                                        textAlign = TextAlign.End,
-                                    ),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            inner()
-                        }
-                    },
+                    onFocused = onFocused,
                 )
                 row.rateLabel?.let { label ->
                     Spacer(Modifier.height(3.dp))
@@ -205,6 +189,70 @@ fun CurrencyRow(
             }
         }
     }
+}
+
+/**
+ * The amount entry, with the caret pinned to the end of the text.
+ *
+ * The field mirrors [text] locally because the caret has to be corrected even when
+ * the model does not change — tapping into the middle of a number, or typing a
+ * character the sanitiser rejects, both leave the model as it was. Every edit
+ * writes the mirror, which guarantees a recomposition, and the [SideEffect] then
+ * reconciles the mirror back to the model with the caret at the end.
+ */
+@Composable
+private fun AmountField(
+    text: String,
+    isActive: Boolean,
+    contentDescription: String,
+    focusRequester: FocusRequester,
+    onValueChange: (String) -> Unit,
+    onFocused: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    var field by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+
+    SideEffect {
+        if (field.text != text || field.selection != TextRange(text.length)) {
+            field = TextFieldValue(text, TextRange(text.length))
+        }
+    }
+
+    BasicTextField(
+        value = field,
+        onValueChange = { edited ->
+            field = edited.copy(selection = TextRange(edited.text.length))
+            onValueChange(edited.text)
+        },
+        singleLine = true,
+        textStyle = AmountTextStyle.copy(
+            color = if (isActive) colors.onSecondaryContainer else colors.onSurface,
+            textAlign = TextAlign.End,
+            fontSize = amountFontSize(text.length),
+        ),
+        cursorBrush = SolidColor(colors.primary),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester)
+            .onFocusChanged { if (it.isFocused) onFocused() }
+            .semantics { this.contentDescription = contentDescription },
+        decorationBox = { inner ->
+            Box(contentAlignment = Alignment.CenterEnd) {
+                if (text.isEmpty()) {
+                    Text(
+                        text = "0",
+                        style = AmountTextStyle.copy(
+                            color = colors.onSurfaceVariant.copy(alpha = 0.35f),
+                            textAlign = TextAlign.End,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                inner()
+            }
+        },
+    )
 }
 
 /** Steps the amount down a size or two so long currencies still fit on one line. */

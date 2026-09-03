@@ -40,7 +40,7 @@ class ScreenshotTest {
 
     private val state = ConverterUiState(
         rows = listOf(
-            row("USD", "1250", active = true),
+            row("USD", "1,250", active = true),
             row("EUR", "1,142.75", rate = "1 USD = 0.9142"),
             row("GBP", "986.38", rate = "1 USD = 0.7891"),
             row("JPY", "184,000", rate = "1 USD = 147.20"),
@@ -82,17 +82,17 @@ class ScreenshotTest {
 
     @Test
     fun light() = shoot("light", dark = false) {
-        ConverterScreen(state, {_,_->}, {}, {}, {}, {}, {}, {}, {}, {})
+        ConverterScreen(state, {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
     }
 
     @Test
     fun dark() = shoot("dark", dark = true) {
-        ConverterScreen(state, {_,_->}, {}, {}, {}, {}, {}, {}, {}, {})
+        ConverterScreen(state, {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
     }
 
     @Test
     fun offline() = shoot("offline", dark = false) {
-        ConverterScreen(state.copy(isOffline = true), {_,_->}, {}, {}, {}, {}, {}, {}, {}, {})
+        ConverterScreen(state.copy(isOffline = true), {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
     }
 
     @Test

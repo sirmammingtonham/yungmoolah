@@ -100,6 +100,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.reorderable)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

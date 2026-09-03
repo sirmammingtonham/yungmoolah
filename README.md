@@ -24,9 +24,12 @@ working offline.
   hours when there is a connection, and survives reboots. Pull down to refresh by
   hand.
 - **Pin, reorder, remove.** Add from a searchable list of every supported currency,
-  swipe a row away (with undo), long-press one to move it to the top.
+  swipe a row away (with undo), long-press and drag one to reorder.
 - **Clear in one tap.** The row being edited carries a clear button; clearing it
   blanks every row so you can start a new figure.
+- **Grouped as you type.** The row being edited gains thousands separators
+  keystroke by keystroke, and the caret stays at the end wherever you tap.
+- **Tap anywhere else** to drop the highlight and put the keyboard away.
 
 ## Install
 
@@ -84,6 +87,11 @@ Single-module Android app, Kotlin and Jetpack Compose with Material 3.
 
 A few decisions worth knowing:
 
+- **The amount field is caret-at-end by design.** Because the text is regrouped on
+  every keystroke, an edit is understood as an intent — characters appended,
+  characters deleted off the end, or a paste — rather than by re-parsing the
+  string, which could not tell a group separator from a decimal comma. See
+  `editAmount`.
 - **Rates are stored relative to one base.** Converting between two arbitrary
   currencies is then the ratio of their two rates, which is what lets a single
   edited amount drive every row without touching the network.
@@ -102,17 +110,20 @@ A few decisions worth knowing:
   they update.
 - **The rates provider** is the keyless tier of [exchangerate-api.com]
   (`open.er-api.com`), which needs no account or API key and republishes daily.
-  Swap `RatesApi.DEFAULT_BASE_URL` to change providers.
+  Its terms require attribution on the screen showing the rates, which is the
+  quiet line under the status chip; it may be discreet but not removed. Swap
+  `RatesApi.DEFAULT_BASE_URL` to change providers.
 
 ## Tests
 
-`./gradlew testDebugUnitTest` runs 68 JVM tests — no device or emulator needed,
+`./gradlew testDebugUnitTest` runs 103 JVM tests — no device or emulator needed,
 since the Compose and Android-dependent cases run under Robolectric.
 
 | Suite | Covers |
 | --- | --- |
 | `ConversionTest` | Cross rates, round trips, missing and unusable rates |
 | `AmountFormatTest` | Input sanitising, grouping, per-currency precision |
+| `AmountEditingTest` | Typing, backspacing and pasting into the grouped field |
 | `RatesApiTest` | Parsing, HTTP errors, malformed and provider-level failures |
 | `ConverterViewModelTest` | The real store and repository: editing, pinning, offline fallback |
 | `ConverterScreenTest`, `CurrencyPickerTest` | The composed UI and its callbacks |

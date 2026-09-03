@@ -41,6 +41,71 @@ fun sanitizeAmountInput(proposed: String, current: String): String {
     }
 }
 
+/**
+ * Adds thousands separators to a raw entry for display, leaving the decimal part
+ * exactly as typed.
+ *
+ * The field shows this while the decimal point, trailing zeros and an empty
+ * fraction all have to survive: "1234." stays "1,234." rather than collapsing to
+ * "1,234", so the next keystroke still lands after the point.
+ */
+fun groupForEditing(raw: String): String {
+    if (raw.isEmpty()) return ""
+    val dot = raw.indexOf('.')
+    val integerPart = if (dot >= 0) raw.substring(0, dot) else raw
+    val tail = if (dot >= 0) raw.substring(dot) else ""
+    if (integerPart.isEmpty()) return tail
+
+    val grouped = StringBuilder()
+    for ((i, ch) in integerPart.withIndex()) {
+        if (i > 0 && (integerPart.length - i) % 3 == 0) grouped.append(',')
+        grouped.append(ch)
+    }
+    return grouped.toString() + tail
+}
+
+/**
+ * Turns an edit of the *displayed* text back into the raw entry behind it.
+ *
+ * The field is grouped as you type, so the text the keyboard hands back contains
+ * separators the model never stores. Rather than re-parsing the whole string —
+ * which cannot tell a group separator from a decimal comma — this works out what
+ * the edit was: characters appended, characters deleted off the end, or anything
+ * else (a paste, a select-all replacement), which falls back to reading the digits.
+ *
+ * The caret is pinned to the end of the field, so an edit only ever lands there.
+ *
+ * @param raw the current entry, without separators
+ * @param oldDisplay what the field was showing, i.e. [groupForEditing] of [raw]
+ * @param newDisplay what the field is showing after the edit
+ */
+fun editAmount(raw: String, oldDisplay: String, newDisplay: String): String {
+    if (newDisplay.isEmpty()) return ""
+
+    if (newDisplay.length > oldDisplay.length && newDisplay.startsWith(oldDisplay)) {
+        var next = raw
+        for (typed in newDisplay.substring(oldDisplay.length)) {
+            // A keyboard that offers only a comma still means a decimal point here;
+            // group separators never arrive this way, they are added on display.
+            next = sanitizeAmountInput(next + if (typed == ',') '.' else typed, next)
+        }
+        return next
+    }
+
+    if (newDisplay.length < oldDisplay.length && oldDisplay.startsWith(newDisplay)) {
+        // Grouping never puts a separator last, so every character deleted off the
+        // end is one the raw entry actually holds.
+        val deleted = oldDisplay.substring(newDisplay.length).count { it != ',' }
+        return raw.dropLast(deleted)
+    }
+
+    val digits = newDisplay.filter { it.isDigit() || it == '.' }
+    // Text that holds no number at all is not an edit anyone meant: keep the entry.
+    // Clearing the field is the empty case above, and is handled there.
+    if (digits.isEmpty()) return raw
+    return sanitizeAmountInput(digits, raw)
+}
+
 /** Parses a sanitized field value; a partial entry like "" or "." counts as zero. */
 fun parseAmount(text: String): Double = text.toDoubleOrNull() ?: 0.0
 

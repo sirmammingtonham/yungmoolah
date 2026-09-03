@@ -2,6 +2,8 @@ package com.yungmoolah.converter
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -166,6 +168,43 @@ class ConverterScreenTest {
     }
 
     @Test
+    fun `tapping a row starts editing it`() {
+        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+
+        compose.onNodeWithContentDescription("Euro amount").performClick()
+
+        compose.onNodeWithContentDescription("Euro amount").assertIsFocused()
+    }
+
+    @Test
+    fun `tapping outside the rows drops the highlight`() {
+        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.onNodeWithContentDescription("Euro amount").performClick()
+        compose.onNodeWithContentDescription("Euro amount").assertIsFocused()
+
+        // The footer area belongs to no row, so the tap reaches the page behind it.
+        compose.onNodeWithText("Rates By Exchange Rate API").performClick()
+
+        compose.onNodeWithContentDescription("Euro amount").assertIsNotFocused()
+    }
+
+    @Test
+    fun `the branding and the gesture hints are gone`() {
+        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+
+        compose.onAllNodesWithText("YungMoolah").assertCountEquals(0)
+        compose.onAllNodesWithText("every other row follows", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("swipe a row", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `the rates provider is still credited, as its terms require`() {
+        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+
+        compose.onNodeWithText("Rates By Exchange Rate API").assertExists()
+    }
+
+    @Test
     fun `the add tile opens the picker`() {
         compose.setContent { MoolahTheme { ConverterScreen(state) } }
 
@@ -202,7 +241,7 @@ private fun ConverterScreen(
     onRowFocused = {},
     onClear = onClear,
     onRemove = {},
-    onMoveToTop = {},
+    onMove = { _, _ -> },
     onAdd = onAdd,
     onUndoRemove = {},
     onRefresh = onRefresh,

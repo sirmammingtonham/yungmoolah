@@ -1,7 +1,8 @@
 package com.yungmoolah.converter.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,13 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CloudOff
@@ -25,8 +25,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
@@ -44,10 +44,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.yungmoolah.converter.data.ALL_CURRENCIES
 import com.yungmoolah.converter.ui.theme.MoolahShapes
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +62,7 @@ fun ConverterScreen(
     onRowFocused: (String) -> Unit,
     onClear: (String) -> Unit,
     onRemove: (String) -> Unit,
-    onMoveToTop: (String) -> Unit,
+    onMove: (Int, Int) -> Unit,
     onAdd: (String) -> Unit,
     onUndoRemove: () -> Unit,
     onRefresh: () -> Unit,
@@ -65,6 +70,13 @@ fun ConverterScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showPicker by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        onMove(from.index, to.index)
+    }
 
     state.transientMessage?.let { message ->
         LaunchedEffect(message) {
@@ -94,43 +106,48 @@ fun ConverterScreen(
                 .padding(insets)
                 // The list shrinks around the keyboard so the row being edited
                 // stays on screen instead of hiding behind it.
-                .imePadding(),
+                .imePadding()
+                // A tap that no row claimed drops the highlight and the keyboard.
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                        keyboard?.hide()
+                    })
+                },
         ) {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 40.dp),
+                state = listState,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                item(key = "header") {
-                    Header(
-                        state = state,
-                        onRefresh = onRefresh,
-                    )
-                }
-
-                items(state.rows, key = { it.code }) { row ->
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                onRemove(row.code)
-                                true
-                            } else {
-                                false
-                            }
-                        },
-                    )
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        enableDismissFromStartToEnd = false,
-                        backgroundContent = { RowDismissBackground() },
-                    ) {
-                        CurrencyRow(
-                            row = row,
-                            onAmountChanged = { onAmountChanged(row.code, it) },
-                            onFocused = { onRowFocused(row.code) },
-                            onClear = { onClear(row.code) },
-                            onLongPress = { onMoveToTop(row.code) },
+                items(count = state.rows.size, key = { state.rows[it].code }) { index ->
+                    val row = state.rows[index]
+                    ReorderableItem(reorderState, key = row.code) { isDragging ->
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                if (value == SwipeToDismissBoxValue.EndToStart) {
+                                    onRemove(row.code)
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
                         )
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            enableDismissFromStartToEnd = false,
+                            backgroundContent = { RowDismissBackground() },
+                        ) {
+                            CurrencyRow(
+                                row = row,
+                                onAmountChanged = { onAmountChanged(row.code, it) },
+                                onFocused = { onRowFocused(row.code) },
+                                onClear = { onClear(row.code) },
+                                dragHandle = Modifier.longPressDraggableHandle(),
+                                isDragging = isDragging,
+                            )
+                        }
                     }
                 }
 
@@ -141,17 +158,8 @@ fun ConverterScreen(
                     )
                 }
 
-                item(key = "footer") {
-                    Text(
-                        text = "Swipe a row to remove · long-press to move it to the top\n" +
-                            "Rates by exchangerate-api.com",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                    )
+                item(key = "status") {
+                    StatusFooter(state = state, onRefresh = onRefresh)
                 }
             }
         }
@@ -169,29 +177,14 @@ fun ConverterScreen(
     }
 }
 
+/**
+ * Freshness of the rates, and a tap target to refresh them.
+ *
+ * The link to the rates provider is required by the terms of its free tier, which
+ * ask for attribution on the page the rates appear on but allow it to be discreet.
+ */
 @Composable
-private fun Header(state: ConverterUiState, onRefresh: () -> Unit) {
-    Column(modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 10.dp)) {
-        Text(
-            text = "YungMoolah",
-            style = MaterialTheme.typography.displaySmall,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        AnimatedVisibility(visible = state.rows.isNotEmpty() && state.activeCode.isNotEmpty()) {
-            Text(
-                text = "Editing ${state.activeCode} — every other row follows",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 5.dp),
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        StatusChip(state = state, onRefresh = onRefresh)
-    }
-}
-
-@Composable
-private fun StatusChip(state: ConverterUiState, onRefresh: () -> Unit) {
+private fun StatusFooter(state: ConverterUiState, onRefresh: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val noRatesYet = state.ratesUpdatedAtMillis == null
     val label = when {
@@ -202,41 +195,57 @@ private fun StatusChip(state: ConverterUiState, onRefresh: () -> Unit) {
     }
     val showWarning = state.isOffline && !state.isRefreshing
 
-    Surface(
-        color = if (showWarning) colors.tertiaryContainer else colors.surfaceContainer,
-        shape = MoolahShapes.Chip,
-        modifier = Modifier.clip(MoolahShapes.Chip).clickable(onClick = onRefresh),
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 10.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
+        Surface(
+            color = if (showWarning) colors.tertiaryContainer else colors.surfaceContainer,
+            shape = MoolahShapes.Chip,
+            modifier = Modifier
+                .clip(MoolahShapes.Chip)
+                .clickable(onClick = onRefresh),
         ) {
-            when {
-                state.isRefreshing -> CircularProgressIndicator(
-                    strokeWidth = 2.dp,
-                    color = colors.primary,
-                    modifier = Modifier.size(13.dp),
-                )
-                showWarning -> Icon(
-                    imageVector = Icons.Rounded.CloudOff,
-                    contentDescription = null,
-                    tint = colors.onTertiaryContainer,
-                    modifier = Modifier.size(14.dp),
-                )
-                else -> Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(14.dp),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 10.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
+            ) {
+                when {
+                    state.isRefreshing -> CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = colors.primary,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    showWarning -> Icon(
+                        imageVector = Icons.Rounded.CloudOff,
+                        contentDescription = null,
+                        tint = colors.onTertiaryContainer,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    else -> Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        tint = colors.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (showWarning) colors.onTertiaryContainer else colors.onSurfaceVariant,
                 )
             }
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (showWarning) colors.onTertiaryContainer else colors.onSurfaceVariant,
-            )
         }
+        Text(
+            text = "Rates By Exchange Rate API",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onSurfaceVariant.copy(alpha = 0.45f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 10.dp),
+        )
     }
 }
 
@@ -249,7 +258,11 @@ private fun AddCurrencyTile(enabled: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(MoolahShapes.Card)
-            .clickable(onClick = onClick),
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

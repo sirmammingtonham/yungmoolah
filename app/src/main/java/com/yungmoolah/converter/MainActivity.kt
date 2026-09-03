@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
                     onRowFocused = viewModel::onRowFocused,
                     onClear = viewModel::clearAmount,
                     onRemove = viewModel::removeCurrency,
-                    onMoveToTop = viewModel::moveToTop,
+                    onMove = viewModel::moveCurrency,
                     onAdd = viewModel::addCurrency,
                     onUndoRemove = viewModel::undoRemove,
                     onRefresh = { viewModel.refresh(force = true) },
