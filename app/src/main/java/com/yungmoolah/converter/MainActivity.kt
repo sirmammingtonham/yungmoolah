@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.yungmoolah.converter.ui.ConverterScreen
+import com.yungmoolah.converter.ui.MoolahScreen
 import com.yungmoolah.converter.ui.ConverterViewModel
 import com.yungmoolah.converter.ui.theme.MoolahTheme
 
@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
                 )
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-                ConverterScreen(
+                MoolahScreen(
                     state = state,
                     onAmountChanged = viewModel::onAmountChanged,
                     onRowFocused = viewModel::onRowFocused,

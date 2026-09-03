@@ -8,9 +8,19 @@ import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.yungmoolah.converter.data.CURRENCY_BY_CODE
-import com.yungmoolah.converter.ui.ConverterScreen
+import com.yungmoolah.converter.ui.MoolahScreen
 import com.yungmoolah.converter.ui.ConverterUiState
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import com.yungmoolah.converter.domain.formatAmount
+import com.yungmoolah.converter.domain.formatRate
+import com.yungmoolah.converter.domain.ladderFor
+import com.yungmoolah.converter.domain.mentalShortcut
+import com.yungmoolah.converter.ui.AppHeader
 import com.yungmoolah.converter.ui.CurrencyPickerContent
+import com.yungmoolah.converter.ui.MoolahTab
+import com.yungmoolah.converter.ui.ShortcutCardUi
+import com.yungmoolah.converter.ui.ShortcutsList
 import com.yungmoolah.converter.ui.CurrencyRowUi
 import com.yungmoolah.converter.ui.theme.MoolahTheme
 import java.io.File
@@ -38,26 +48,49 @@ class ScreenshotTest {
     private fun row(code: String, amount: String, active: Boolean = false, rate: String? = null) =
         CurrencyRowUi(CURRENCY_BY_CODE.getValue(code), amount, active, rate)
 
+    /** Rates per dollar, used to keep every fixture internally consistent. */
+    private val perDollar = mapOf("EUR" to 0.9142, "GBP" to 0.7891, "JPY" to 147.2, "INR" to 88.4)
+
+    private fun derivedRow(code: String, dollars: Double) = row(
+        code = code,
+        amount = formatAmount(dollars * perDollar.getValue(code), code),
+        rate = "1 USD = ${formatRate(perDollar.getValue(code))}",
+    )
+
     private val state = ConverterUiState(
-        rows = listOf(
-            row("USD", "1,250", active = true),
-            row("EUR", "1,142.75", rate = "1 USD = 0.9142"),
-            row("GBP", "986.38", rate = "1 USD = 0.7891"),
-            row("JPY", "184,000", rate = "1 USD = 147.20"),
-            row("INR", "110,500.00", rate = "1 USD = 88.4000"),
-        ),
+        rows = listOf(row("USD", "1,250", active = true)) +
+            perDollar.keys.map { derivedRow(it, 1250.0) },
         activeCode = "USD",
         isLoading = false,
         ratesUpdatedAtMillis = System.currentTimeMillis() - 7_200_000L,
         pinnedCodes = listOf("USD", "EUR", "GBP", "JPY", "INR"),
+        // Foreign-to-home, the direction the tab actually shows, so the rates
+        // quoted per dollar are inverted here just as the ViewModel inverts them.
+        shortcuts = listOf("EUR" to 0.9142, "GBP" to 0.7891, "JPY" to 147.2, "INR" to 88.4)
+            .map { (code, perDollar) ->
+                val rate = 1.0 / perDollar
+                ShortcutCardUi(
+                    from = CURRENCY_BY_CODE.getValue(code),
+                    to = CURRENCY_BY_CODE.getValue("USD"),
+                    rate = rate,
+                    shortcut = mentalShortcut(rate)!!,
+                    ladder = ladderFor(rate),
+                )
+            },
     )
 
-    private fun shoot(name: String, dark: Boolean, content: @androidx.compose.runtime.Composable () -> Unit) {
+    private fun shoot(
+        name: String,
+        dark: Boolean,
+        beforeCapture: () -> Unit = {},
+        content: @androidx.compose.runtime.Composable () -> Unit,
+    ) {
         compose.setContent {
             MoolahTheme(darkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize()) { content() }
             }
         }
+        beforeCapture()
         compose.waitForIdle()
         // Robolectric never runs a real redraw loop, so captureToImage() times out;
         // drawing the decor view straight into a bitmap works instead.
@@ -82,21 +115,56 @@ class ScreenshotTest {
 
     @Test
     fun light() = shoot("light", dark = false) {
-        ConverterScreen(state, {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
+        MoolahScreen(state, {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
     }
 
     @Test
     fun dark() = shoot("dark", dark = true) {
-        ConverterScreen(state, {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
+        MoolahScreen(state, {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
     }
 
     @Test
     fun offline() = shoot("offline", dark = false) {
-        ConverterScreen(state.copy(isOffline = true), {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
+        MoolahScreen(state.copy(isOffline = true), {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
     }
 
     @Test
     fun picker() = shoot("picker", dark = false) {
         CurrencyPickerContent(pinned = listOf("USD", "EUR"), onPick = {})
+    }
+
+    @Test
+    fun shortcuts() = shoot("shortcuts", dark = false) {
+        androidx.compose.foundation.layout.Column {
+            AppHeader(selected = MoolahTab.Shortcuts, onSelect = {})
+            ShortcutsList(state)
+        }
+    }
+
+    @Test
+    fun shortcutsDark() = shoot("shortcuts-dark", dark = true) {
+        androidx.compose.foundation.layout.Column {
+            AppHeader(selected = MoolahTab.Shortcuts, onSelect = {})
+            ShortcutsList(state)
+        }
+    }
+
+    @Test
+    fun editing() {
+        // A sum in the field, with every other row showing what it comes to.
+        val expr = state.copy(
+            rows = listOf(row("USD", "1,250×3", active = true, rate = "= 3,750.00")) +
+                perDollar.keys.map { derivedRow(it, 3_750.0) },
+        )
+        shoot(
+            name = "editing",
+            dark = false,
+            // Focusing a row is what brings the operator keys onto the screen.
+            beforeCapture = {
+                compose.onNodeWithContentDescription("US Dollar amount").performClick()
+            },
+        ) {
+            MoolahScreen(expr, {_,_->}, {}, {}, {}, {_,_->}, {}, {}, {}, {})
+        }
     }
 }

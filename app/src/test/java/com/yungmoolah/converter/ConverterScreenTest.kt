@@ -13,7 +13,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import com.yungmoolah.converter.data.CURRENCY_BY_CODE
-import com.yungmoolah.converter.ui.ConverterScreen
+import com.yungmoolah.converter.ui.MoolahScreen
 import com.yungmoolah.converter.ui.ConverterUiState
 import com.yungmoolah.converter.ui.CurrencyRowUi
 import com.yungmoolah.converter.ui.theme.MoolahTheme
@@ -58,7 +58,7 @@ class ConverterScreenTest {
 
     @Test
     fun `renders every pinned currency with its amount`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
 
         compose.onNodeWithText("USD").assertExists()
         compose.onNodeWithText("Euro").assertExists()
@@ -74,7 +74,7 @@ class ConverterScreenTest {
         val edits = mutableListOf<Pair<String, String>>()
         compose.setContent {
             MoolahTheme {
-                ConverterScreen(state, onAmountChanged = { code, text -> edits += code to text })
+                MoolahScreen(state, onAmountChanged = { code, text -> edits += code to text })
             }
         }
 
@@ -85,14 +85,14 @@ class ConverterScreenTest {
 
     @Test
     fun `the status line reports when the rates were updated`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
         compose.onNodeWithText("Rates updated", substring = true).assertExists()
     }
 
     @Test
     fun `an offline cache is called out instead of shown as current`() {
         compose.setContent {
-            MoolahTheme { ConverterScreen(state.copy(isOffline = true)) }
+            MoolahTheme { MoolahScreen(state.copy(isOffline = true)) }
         }
         compose.onNodeWithText("Offline", substring = true).assertExists()
     }
@@ -101,7 +101,7 @@ class ConverterScreenTest {
     fun `with no rates yet the screen invites a download`() {
         compose.setContent {
             MoolahTheme {
-                ConverterScreen(
+                MoolahScreen(
                     state.copy(
                         ratesUpdatedAtMillis = null,
                         isOffline = true,
@@ -115,7 +115,7 @@ class ConverterScreenTest {
 
     @Test
     fun `only the row being edited offers a clear button`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
 
         // One clear button on screen, and it belongs to the active row.
         compose.onAllNodesWithContentDescription("Clear amount").assertCountEquals(1)
@@ -124,7 +124,7 @@ class ConverterScreenTest {
     @Test
     fun `the clear button reports the row it belongs to`() {
         var cleared: String? = null
-        compose.setContent { MoolahTheme { ConverterScreen(state, onClear = { cleared = it }) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state, onClear = { cleared = it }) } }
 
         compose.onNodeWithContentDescription("Clear amount").performClick()
 
@@ -135,7 +135,7 @@ class ConverterScreenTest {
     fun `an empty active row has nothing to clear`() {
         compose.setContent {
             MoolahTheme {
-                ConverterScreen(
+                MoolahScreen(
                     state.copy(rows = state.rows.map { it.copy(amountText = "") })
                 )
             }
@@ -149,7 +149,7 @@ class ConverterScreenTest {
         var messageConsumed = false
         compose.setContent {
             MoolahTheme {
-                ConverterScreen(
+                MoolahScreen(
                     state.copy(transientMessage = "Removed GBP"),
                     onMessageShown = { messageConsumed = true },
                 )
@@ -169,7 +169,7 @@ class ConverterScreenTest {
 
     @Test
     fun `tapping a row starts editing it`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
 
         compose.onNodeWithContentDescription("Euro amount").performClick()
 
@@ -178,7 +178,7 @@ class ConverterScreenTest {
 
     @Test
     fun `tapping outside the rows drops the highlight`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
         compose.onNodeWithContentDescription("Euro amount").performClick()
         compose.onNodeWithContentDescription("Euro amount").assertIsFocused()
 
@@ -190,7 +190,7 @@ class ConverterScreenTest {
 
     @Test
     fun `the branding and the gesture hints are gone`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
 
         compose.onAllNodesWithText("YungMoolah").assertCountEquals(0)
         compose.onAllNodesWithText("every other row follows", substring = true).assertCountEquals(0)
@@ -199,14 +199,65 @@ class ConverterScreenTest {
 
     @Test
     fun `the rates provider is still credited, as its terms require`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
 
         compose.onNodeWithText("Rates By Exchange Rate API").assertExists()
     }
 
     @Test
+    fun `the header carries the name quietly and both tabs`() {
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
+
+        compose.onNodeWithText("yungmoolah").assertExists()
+        compose.onNodeWithText("Convert").assertExists()
+        compose.onNodeWithText("Shortcuts").assertExists()
+    }
+
+    @Test
+    fun `the shortcuts tab replaces the converter`() {
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
+        compose.onNodeWithText("Euro").assertExists()
+
+        compose.onNodeWithText("Shortcuts").performClick()
+
+        compose.onAllNodesWithText("Euro").assertCountEquals(0)
+        compose.onNodeWithText("Pin a second currency", substring = true).assertExists()
+
+        compose.onNodeWithText("Convert").performClick()
+        compose.onNodeWithText("Euro").assertExists()
+    }
+
+    @Test
+    fun `the operator keys appear only while a row is being edited`() {
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
+
+        compose.onAllNodesWithContentDescription("Multiply").assertCountEquals(0)
+
+        compose.onNodeWithContentDescription("Euro amount").performClick()
+
+        compose.onNodeWithContentDescription("Multiply").assertExists()
+        compose.onNodeWithContentDescription("Divide").assertExists()
+        compose.onNodeWithContentDescription("Open bracket").assertExists()
+    }
+
+    @Test
+    fun `an operator key appends to the row being edited`() {
+        val edits = mutableListOf<Pair<String, String>>()
+        compose.setContent {
+            MoolahTheme {
+                MoolahScreen(state, onAmountChanged = { code, text -> edits += code to text })
+            }
+        }
+
+        compose.onNodeWithContentDescription("US Dollar amount").performClick()
+        compose.onNodeWithContentDescription("Multiply").performClick()
+
+        assertEquals(listOf("USD" to "100×"), edits)
+    }
+
+    @Test
     fun `the add tile opens the picker`() {
-        compose.setContent { MoolahTheme { ConverterScreen(state) } }
+        compose.setContent { MoolahTheme { MoolahScreen(state) } }
 
         compose.onNodeWithText("Add currency").performClick()
 
@@ -217,7 +268,7 @@ class ConverterScreenTest {
     fun `tapping the status chip triggers a refresh`() {
         var refreshes = 0
         compose.setContent {
-            MoolahTheme { ConverterScreen(state, onRefresh = { refreshes++ }) }
+            MoolahTheme { MoolahScreen(state, onRefresh = { refreshes++ }) }
         }
 
         compose.onNodeWithText("Rates updated", substring = true).performClick()
@@ -228,14 +279,14 @@ class ConverterScreenTest {
 
 /** Keeps the tests focused on one callback at a time. */
 @Composable
-private fun ConverterScreen(
+private fun MoolahScreen(
     state: ConverterUiState,
     onAmountChanged: (String, String) -> Unit = { _, _ -> },
     onAdd: (String) -> Unit = {},
     onRefresh: () -> Unit = {},
     onClear: (String) -> Unit = {},
     onMessageShown: () -> Unit = {},
-) = ConverterScreen(
+) = MoolahScreen(
     state = state,
     onAmountChanged = onAmountChanged,
     onRowFocused = {},

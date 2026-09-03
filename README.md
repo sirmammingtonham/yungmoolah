@@ -1,4 +1,4 @@
-# YungMoolah
+# yungmoolah
 
 A multi-currency converter for Android. Every pinned currency is a live, editable
 field on one page: type an amount into any of them and the rest recompute
@@ -6,9 +6,10 @@ instantly. Rates come from the network once a day, are cached on disk, and keep
 working offline.
 
 <p align="center">
-  <img src="docs/screenshot-light.png" width="270" alt="Converter, light theme">
-  <img src="docs/screenshot-dark.png" width="270" alt="Converter, dark theme">
-  <img src="docs/screenshot-picker.png" width="270" alt="Currency picker">
+  <img src="docs/screenshot-light.png" width="240" alt="Converter, light theme">
+  <img src="docs/screenshot-editing.png" width="240" alt="A sum in the amount field">
+  <img src="docs/screenshot-shortcuts.png" width="240" alt="Mental-arithmetic shortcuts">
+  <img src="docs/screenshot-dark.png" width="240" alt="Converter, dark theme">
 </p>
 
 ## What it does
@@ -30,6 +31,12 @@ working offline.
 - **Grouped as you type.** The row being edited gains thousands separators
   keystroke by keystroke, and the caret stays at the end wherever you tap.
 - **Tap anywhere else** to drop the highlight and put the keyboard away.
+- **Do sums in the field.** Type `24.50×3` or `(80+15)÷4` and every row follows the
+  running total, which is shown under the row you are editing. The system's number
+  pad has no operators, so a bar of arithmetic keys appears above it while you type.
+- **A Shortcuts tab** for when the phone stays in your pocket: for each pinned
+  currency, how to convert it into your home currency in your head, and a ladder of
+  round amounts to recognise on sight.
 
 ## Install
 
@@ -84,6 +91,8 @@ Single-module Android app, Kotlin and Jetpack Compose with Material 3.
 | `ui/` | `ConverterViewModel`, `ConverterScreen`, `CurrencyRow`, `AddCurrencySheet` | State and presentation |
 | `work/` | `RefreshWorker` | Periodic background refresh |
 | `ui/theme/` | `Color`, `Type`, `Shape`, `Theme` | Palette, the Inter type scale, corner radii |
+| `domain/` | `Expression` | Parsing and evaluating a typed sum |
+| `domain/` | `MentalMath` | Deriving an in-your-head recipe from a rate |
 
 A few decisions worth knowing:
 
@@ -92,6 +101,17 @@ A few decisions worth knowing:
   characters deleted off the end, or a paste — rather than by re-parsing the
   string, which could not tell a group separator from a decimal comma. See
   `editAmount`.
+- **A half-typed sum still has a value.** `evaluateEntry` evaluates the longest
+  leading part of the entry that parses, so "120×" is worth 120 and the other rows
+  keep up on every keystroke instead of freezing until the sum is finished.
+- **The shortcuts run foreign-to-home**, which is the direction you need in front of
+  a price tag, and their vocabulary is restricted to operations a person can
+  actually do: decimal shifts, halving and doubling, dividing by a single digit,
+  simple fractions, and percentage nudges. `MentalMath` scores candidate recipes on
+  accuracy *plus* effort, with a per-step penalty — without it the search trades a
+  two-step recipe for a three-step one half a percent closer, which is the wrong
+  trade for arithmetic done from memory. Multiplying by 0.83 is never suggested,
+  however close to the rate it lands.
 - **Rates are stored relative to one base.** Converting between two arbitrary
   currencies is then the ratio of their two rates, which is what lets a single
   edited amount drive every row without touching the network.
@@ -116,7 +136,7 @@ A few decisions worth knowing:
 
 ## Tests
 
-`./gradlew testDebugUnitTest` runs 103 JVM tests — no device or emulator needed,
+`./gradlew testDebugUnitTest` runs 157 JVM tests — no device or emulator needed,
 since the Compose and Android-dependent cases run under Robolectric.
 
 | Suite | Covers |
@@ -124,6 +144,9 @@ since the Compose and Android-dependent cases run under Robolectric.
 | `ConversionTest` | Cross rates, round trips, missing and unusable rates |
 | `AmountFormatTest` | Input sanitising, grouping, per-currency precision |
 | `AmountEditingTest` | Typing, backspacing and pasting into the grouped field |
+| `ExpressionTest` | Operator precedence, brackets, malformed and half-typed sums |
+| `MentalMathTest` | That every recipe is doable in your head and honest about its error |
+| `ShortcutsListTest` | The shortcuts tab |
 | `RatesApiTest` | Parsing, HTTP errors, malformed and provider-level failures |
 | `ConverterViewModelTest` | The real store and repository: editing, pinning, offline fallback |
 | `ConverterScreenTest`, `CurrencyPickerTest` | The composed UI and its callbacks |

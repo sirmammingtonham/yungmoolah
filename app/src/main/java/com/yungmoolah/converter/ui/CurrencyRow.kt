@@ -69,7 +69,7 @@ private val ClearSlotWidth = 32.dp
 fun CurrencyRow(
     row: CurrencyRowUi,
     onAmountChanged: (String) -> Unit,
-    onFocused: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
     dragHandle: Modifier = Modifier,
@@ -157,7 +157,7 @@ fun CurrencyRow(
                     contentDescription = "${row.info.name} amount",
                     focusRequester = focusRequester,
                     onValueChange = onAmountChanged,
-                    onFocused = onFocused,
+                    onFocusChanged = onFocusChanged,
                 )
                 row.rateLabel?.let { label ->
                     Spacer(Modifier.height(3.dp))
@@ -207,7 +207,7 @@ private fun AmountField(
     contentDescription: String,
     focusRequester: FocusRequester,
     onValueChange: (String) -> Unit,
-    onFocused: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     var field by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
@@ -222,7 +222,9 @@ private fun AmountField(
         value = field,
         onValueChange = { edited ->
             field = edited.copy(selection = TextRange(edited.text.length))
-            onValueChange(edited.text)
+            // A tap inside the field reports a caret move with the text unchanged.
+            // That is not an edit, and passing it on would churn the active row.
+            if (edited.text != text) onValueChange(edited.text)
         },
         singleLine = true,
         textStyle = AmountTextStyle.copy(
@@ -235,7 +237,7 @@ private fun AmountField(
         modifier = Modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
-            .onFocusChanged { if (it.isFocused) onFocused() }
+            .onFocusChanged { onFocusChanged(it.isFocused) }
             .semantics { this.contentDescription = contentDescription },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterEnd) {

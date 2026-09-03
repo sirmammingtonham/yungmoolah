@@ -227,6 +227,122 @@ class ConverterViewModelTest {
     }
 
     @Test
+    fun `a sum in the field drives every other row`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "1250×3")
+        advanceUntilIdle()
+
+        assertEquals("1,250×3", state().rows.first { it.code == "USD" }.amountText)
+        assertEquals("= 3,750.00", state().expressionResult)
+        // 3750 × 0.9142
+        assertEquals("3,428.25", state().rows.first { it.code == "EUR" }.amountText)
+    }
+
+    @Test
+    fun `a half-typed sum keeps the other rows on its completed part`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "100×")
+        advanceUntilIdle()
+
+        // Worth 100 until the multiplier arrives, rather than blanking out.
+        assertEquals("91.42", state().rows.first { it.code == "EUR" }.amountText)
+    }
+
+    @Test
+    fun `the running total shows under the row being edited`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "20+5")
+        advanceUntilIdle()
+        assertEquals("= 25.00", state().rows.first { it.code == "USD" }.rateLabel)
+
+        // A plain amount has no total to show.
+        viewModel.onAmountChanged("USD", "25")
+        advanceUntilIdle()
+        assertEquals(null, state().rows.first { it.code == "USD" }.rateLabel)
+        assertEquals(null, state().expressionResult)
+    }
+
+    @Test
+    fun `operator keys append to whatever the field is showing`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        // What the operator bar does: append its key to the displayed text.
+        fun press(key: Char) {
+            val shown = state().rows.first { it.isActive }.amountText
+            viewModel.onAmountChanged(state().activeCode, shown + key)
+        }
+
+        viewModel.onAmountChanged("USD", "1000")
+        advanceUntilIdle()
+        press('÷')
+        advanceUntilIdle()
+        viewModel.onAmountChanged("USD", state().rows.first { it.isActive }.amountText + "4")
+        advanceUntilIdle()
+
+        assertEquals("1,000÷4", state().rows.first { it.code == "USD" }.amountText)
+        assertEquals("= 250.00", state().expressionResult)
+    }
+
+    @Test
+    fun `clearing a sum empties the field`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+
+        viewModel.onAmountChanged("USD", "12×3")
+        advanceUntilIdle()
+        viewModel.clearAmount("USD")
+        advanceUntilIdle()
+
+        assertTrue(state().rows.all { it.amountText.isEmpty() })
+        assertEquals(null, state().expressionResult)
+    }
+
+    // --- shortcuts tab --------------------------------------------------------
+
+    @Test
+    fun `shortcuts run from each pinned currency into the one being edited`() = runTest(dispatcher) {
+        server.enqueue(MockResponse().setBody(ratesBody()))
+        val state = collectState()
+        advanceUntilIdle()
+
+        // The direction that matters standing at a till abroad: foreign -> home.
+        assertEquals(listOf("EUR", "GBP", "JPY", "INR"), state().shortcuts.map { it.from.code })
+        assertTrue(state().shortcuts.all { it.to.code == "USD" })
+        // 1 EUR is worth 1/0.9142 USD.
+        assertEquals(1.0 / 0.9142, state().shortcuts.first().rate, 1e-9)
+        assertEquals(listOf("add 10%"), state().shortcuts.first().shortcut.steps)
+    }
+
+    @Test
+    fun `switching the row being edited switches what the shortcuts convert into`() =
+        runTest(dispatcher) {
+            server.enqueue(MockResponse().setBody(ratesBody()))
+            val state = collectState()
+
+            viewModel.onRowFocused("EUR")
+            advanceUntilIdle()
+
+            assertTrue(state().shortcuts.all { it.to.code == "EUR" })
+            assertTrue(state().shortcuts.none { it.from.code == "EUR" })
+        }
+
+    @Test
+    fun `there are no shortcuts before any rates arrive`() = runTest(dispatcher) {
+        server.shutdown()
+        val state = collectState()
+        advanceUntilIdle()
+
+        assertTrue(state().shortcuts.isEmpty())
+    }
+
+    @Test
     fun `rejected keystrokes leave the amount untouched`() = runTest(dispatcher) {
         server.enqueue(MockResponse().setBody(ratesBody()))
         val state = collectState()
@@ -247,7 +363,7 @@ class ConverterViewModelTest {
 
         val rows = state().rows.associateBy { it.code }
         assertEquals("1 USD = 0.9142", rows.getValue("EUR").rateLabel)
-        assertEquals("1 USD = 147.20", rows.getValue("JPY").rateLabel)
+        assertEquals("1 USD = 147.2", rows.getValue("JPY").rateLabel)
         // The row being edited is the reference, so it has no rate line of its own.
         assertEquals(null, rows.getValue("USD").rateLabel)
     }

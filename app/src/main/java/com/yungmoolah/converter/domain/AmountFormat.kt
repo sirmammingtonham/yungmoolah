@@ -51,9 +51,27 @@ fun sanitizeAmountInput(proposed: String, current: String): String {
  */
 fun groupForEditing(raw: String): String {
     if (raw.isEmpty()) return ""
-    val dot = raw.indexOf('.')
-    val integerPart = if (dot >= 0) raw.substring(0, dot) else raw
-    val tail = if (dot >= 0) raw.substring(dot) else ""
+    val out = StringBuilder()
+    var i = 0
+    while (i < raw.length) {
+        val ch = raw[i]
+        if (!ch.isDigit() && ch != '.') {
+            // An operator or bracket: separators only ever go inside a number.
+            out.append(ch)
+            i++
+            continue
+        }
+        val start = i
+        while (i < raw.length && (raw[i].isDigit() || raw[i] == '.')) i++
+        out.append(groupNumber(raw.substring(start, i)))
+    }
+    return out.toString()
+}
+
+private fun groupNumber(number: String): String {
+    val dot = number.indexOf('.')
+    val integerPart = if (dot >= 0) number.substring(0, dot) else number
+    val tail = if (dot >= 0) number.substring(dot) else ""
     if (integerPart.isEmpty()) return tail
 
     val grouped = StringBuilder()
@@ -74,6 +92,7 @@ fun groupForEditing(raw: String): String {
  * else (a paste, a select-all replacement), which falls back to reading the digits.
  *
  * The caret is pinned to the end of the field, so an edit only ever lands there.
+ * The entry may be arithmetic, so operators and brackets survive alongside digits.
  *
  * @param raw the current entry, without separators
  * @param oldDisplay what the field was showing, i.e. [groupForEditing] of [raw]
@@ -87,7 +106,7 @@ fun editAmount(raw: String, oldDisplay: String, newDisplay: String): String {
         for (typed in newDisplay.substring(oldDisplay.length)) {
             // A keyboard that offers only a comma still means a decimal point here;
             // group separators never arrive this way, they are added on display.
-            next = sanitizeAmountInput(next + if (typed == ',') '.' else typed, next)
+            next = sanitizeExpressionInput(next + if (typed == ',') '.' else typed, next)
         }
         return next
     }
@@ -99,11 +118,13 @@ fun editAmount(raw: String, oldDisplay: String, newDisplay: String): String {
         return raw.dropLast(deleted)
     }
 
-    val digits = newDisplay.filter { it.isDigit() || it == '.' }
+    // Drop what an entry cannot hold — group separators, spaces, currency symbols —
+    // and keep digits, points and arithmetic.
+    val stripped = newDisplay.filter { isEntryChar(it) }
     // Text that holds no number at all is not an edit anyone meant: keep the entry.
     // Clearing the field is the empty case above, and is handled there.
-    if (digits.isEmpty()) return raw
-    return sanitizeAmountInput(digits, raw)
+    if (stripped.none { it.isDigit() }) return raw
+    return sanitizeExpressionInput(stripped, raw)
 }
 
 /** Parses a sanitized field value; a partial entry like "" or "." counts as zero. */
@@ -147,6 +168,9 @@ fun formatForEditing(value: Double, code: String): String {
     return formatted.trimEnd('0').trimEnd('.').ifEmpty { "" }
 }
 
+/** Groups a round number with no decimals, for a ladder of amounts. */
+fun formatWhole(value: Double): String = grouping(0).format(round(value, 0))
+
 /**
  * Renders a unit rate for the "1 USD = 0.9234" line.
  *
@@ -160,7 +184,11 @@ fun formatRate(rate: Double): String {
         rate >= 0.01 -> 4
         else -> MAX_DECIMAL_DIGITS
     }
-    return grouping(decimals).format(round(rate, decimals))
+    val formatted = grouping(decimals).format(round(rate, decimals))
+    // A rate of 88.4 is not known to four places; padding it out only implies a
+    // precision the provider never published.
+    if (!formatted.contains('.')) return formatted
+    return formatted.trimEnd('0').trimEnd('.')
 }
 
 private fun round(value: Double, decimals: Int): BigDecimal =

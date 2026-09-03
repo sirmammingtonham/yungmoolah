@@ -109,7 +109,10 @@ class AmountFormatTest {
     fun `rates carry more precision than wallet amounts`() {
         assertEquals("0.9234", formatRate(0.92341))
         assertEquals("150.75", formatRate(150.7512))
-        assertEquals("1.0850", formatRate(1.085))
+        // Trailing zeros are dropped: 88.4 is not known to four decimal places.
+        assertEquals("1.085", formatRate(1.085))
+        assertEquals("88.4", formatRate(88.4))
+        assertEquals("2", formatRate(2.0))
         assertEquals("0.000123", formatRate(0.000123))
         assertEquals("—", formatRate(0.0))
     }

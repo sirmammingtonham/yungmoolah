@@ -8,13 +8,18 @@ import com.yungmoolah.converter.data.CurrencyInfo
 import com.yungmoolah.converter.data.RatesRepository
 import com.yungmoolah.converter.data.RatesSnapshot
 import com.yungmoolah.converter.data.RefreshResult
+import com.yungmoolah.converter.domain.LadderRow
+import com.yungmoolah.converter.domain.MentalShortcut
 import com.yungmoolah.converter.domain.convert
 import com.yungmoolah.converter.domain.editAmount
+import com.yungmoolah.converter.domain.evaluateEntry
 import com.yungmoolah.converter.domain.groupForEditing
+import com.yungmoolah.converter.domain.isExpression
+import com.yungmoolah.converter.domain.ladderFor
+import com.yungmoolah.converter.domain.mentalShortcut
 import com.yungmoolah.converter.domain.formatAmount
 import com.yungmoolah.converter.domain.formatForEditing
 import com.yungmoolah.converter.domain.formatRate
-import com.yungmoolah.converter.domain.parseAmount
 import com.yungmoolah.converter.domain.unitRate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,8 +42,25 @@ data class CurrencyRowUi(
     val code: String get() = info.code
 }
 
+/**
+ * One pair on the shortcuts tab: how to do it in your head, and a ladder of amounts.
+ *
+ * Always runs foreign-to-home — the direction you need standing in front of a price
+ * tag — so [from] is the pinned currency and [to] is the one being edited.
+ */
+data class ShortcutCardUi(
+    val from: CurrencyInfo,
+    val to: CurrencyInfo,
+    val rate: Double,
+    val shortcut: MentalShortcut,
+    val ladder: List<LadderRow>,
+)
+
 data class ConverterUiState(
     val rows: List<CurrencyRowUi> = emptyList(),
+    /** Populated only while the entry is arithmetic, e.g. "= 3,750". */
+    val expressionResult: String? = null,
+    val shortcuts: List<ShortcutCardUi> = emptyList(),
     val activeCode: String = "",
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
@@ -236,7 +258,9 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
         val activeCode = editorState.activeCode?.takeIf { pinned.contains(it) }
             ?: pinned.firstOrNull()
             ?: ""
-        val amount = parseAmount(editorState.input)
+        // A half-typed expression still has a value, so the other rows keep up on
+        // every keystroke rather than only once the arithmetic is finished.
+        val amount = evaluateEntry(editorState.input) ?: 0.0
         val blankInput = editorState.input.isBlank()
 
         val rows = pinned.mapNotNull { code ->
@@ -248,7 +272,9 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
                 else -> convert(amount, activeCode, code, snapshot)?.let { formatAmount(it, code) } ?: ""
             }
             val rateLabel = when {
-                isActive || snapshot == null -> null
+                // The row being edited shows what its arithmetic comes to instead.
+                isActive -> expressionResultOf(editorState.input, code)
+                snapshot == null -> null
                 else -> unitRate(activeCode, code, snapshot)
                     ?.let { "1 $activeCode = ${formatRate(it)}" }
             }
@@ -257,6 +283,8 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
 
         return ConverterUiState(
             rows = rows,
+            expressionResult = expressionResultOf(editorState.input, activeCode),
+            shortcuts = shortcutsFor(snapshot, pinned, activeCode),
             activeCode = activeCode,
             isLoading = snapshot == null && syncState.isRefreshing,
             isRefreshing = syncState.isRefreshing,
@@ -266,6 +294,35 @@ class ConverterViewModel(private val repository: RatesRepository) : ViewModel() 
             transientMessage = syncState.message,
             pinnedCodes = pinned,
         )
+    }
+
+    /** "= 3,750" while the entry is arithmetic; null when it is a plain amount. */
+    private fun expressionResultOf(input: String, code: String): String? {
+        if (!isExpression(input)) return null
+        val value = evaluateEntry(input) ?: return null
+        return "= ${formatAmount(value, code)}"
+    }
+
+    private fun shortcutsFor(
+        snapshot: RatesSnapshot?,
+        pinned: List<String>,
+        activeCode: String,
+    ): List<ShortcutCardUi> {
+        if (snapshot == null) return emptyList()
+        val home = CURRENCY_BY_CODE[activeCode] ?: return emptyList()
+        return pinned.mapNotNull { code ->
+            if (code == activeCode) return@mapNotNull null
+            val foreign = CURRENCY_BY_CODE[code] ?: return@mapNotNull null
+            val rate = unitRate(code, activeCode, snapshot) ?: return@mapNotNull null
+            val shortcut = mentalShortcut(rate) ?: return@mapNotNull null
+            ShortcutCardUi(
+                from = foreign,
+                to = home,
+                rate = rate,
+                shortcut = shortcut,
+                ladder = ladderFor(rate),
+            )
+        }
     }
 
     class Factory(private val repository: RatesRepository) : ViewModelProvider.Factory {

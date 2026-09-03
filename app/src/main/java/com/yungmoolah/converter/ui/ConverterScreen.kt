@@ -56,7 +56,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConverterScreen(
+fun MoolahScreen(
     state: ConverterUiState,
     onAmountChanged: (String, String) -> Unit,
     onRowFocused: (String) -> Unit,
@@ -70,8 +70,17 @@ fun ConverterScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showPicker by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(MoolahTab.Convert) }
+    // Whether a row is being edited, which is what puts the operator bar on screen.
+    var isEditing by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+
+    fun stopEditing() {
+        focusManager.clearFocus()
+        keyboard?.hide()
+        isEditing = false
+    }
 
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -97,24 +106,48 @@ fun ConverterScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            // Sits directly above the number pad while a row is being edited.
+            if (isEditing && tab == MoolahTab.Convert) {
+                OperatorBar(
+                    onKey = { key ->
+                        val shown = state.rows.firstOrNull { it.isActive }?.amountText.orEmpty()
+                        onAmountChanged(state.activeCode, shown + key)
+                    },
+                    modifier = Modifier.imePadding(),
+                )
+            }
+        },
     ) { insets ->
-        PullToRefreshBox(
-            isRefreshing = state.isRefreshing,
-            onRefresh = onRefresh,
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(insets)
-                // The list shrinks around the keyboard so the row being edited
+                // The content shrinks around the keyboard so the row being edited
                 // stays on screen instead of hiding behind it.
-                .imePadding()
-                // A tap that no row claimed drops the highlight and the keyboard.
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = {
-                        focusManager.clearFocus()
-                        keyboard?.hide()
-                    })
-                },
+                .imePadding(),
         ) {
+            AppHeader(
+                selected = tab,
+                onSelect = { selected ->
+                    if (selected != tab) stopEditing()
+                    tab = selected
+                },
+            )
+            if (tab == MoolahTab.Shortcuts) {
+                ShortcutsList(state = state, modifier = Modifier.weight(1f))
+                return@Column
+            }
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier
+                    .weight(1f)
+                    // A tap that no row claimed drops the highlight and the keyboard.
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { stopEditing() })
+                    },
+            ) {
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
@@ -142,7 +175,12 @@ fun ConverterScreen(
                             CurrencyRow(
                                 row = row,
                                 onAmountChanged = { onAmountChanged(row.code, it) },
-                                onFocused = { onRowFocused(row.code) },
+                                onFocusChanged = { focused ->
+                                    if (focused) {
+                                        isEditing = true
+                                        onRowFocused(row.code)
+                                    }
+                                },
                                 onClear = { onClear(row.code) },
                                 dragHandle = Modifier.longPressDraggableHandle(),
                                 isDragging = isDragging,
@@ -161,6 +199,7 @@ fun ConverterScreen(
                 item(key = "status") {
                     StatusFooter(state = state, onRefresh = onRefresh)
                 }
+            }
             }
         }
     }
