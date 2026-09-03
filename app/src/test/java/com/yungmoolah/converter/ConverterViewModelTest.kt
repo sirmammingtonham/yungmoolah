@@ -303,8 +303,8 @@ class ConverterViewModelTest {
         advanceUntilIdle()
 
         // Auto-repeat: deletions arriving far faster than a thumb can tap.
-        repeat(4) {
-            clock += 50
+        repeat(3) {
+            clock += 60
             backspace(state)
             advanceUntilIdle()
         }
@@ -322,7 +322,7 @@ class ConverterViewModelTest {
             advanceUntilIdle()
 
             repeat(4) {
-                clock += 300
+                clock += 450
                 backspace(state)
                 advanceUntilIdle()
             }
@@ -331,7 +331,7 @@ class ConverterViewModelTest {
         }
 
     @Test
-    fun `a burst of deletions has to be a run to count as a held key`() =
+    fun `a pause breaks the run, so deliberate taps are never a hold`() =
         runTest(dispatcher) {
             server.enqueue(MockResponse().setBody(ratesBody()))
             val state = collectState()
@@ -339,13 +339,12 @@ class ConverterViewModelTest {
             viewModel.onAmountChanged("USD", "123456")
             advanceUntilIdle()
 
-            // Three quick deletions, then a pause, then three more: never four in a
-            // row, so this stays six single-digit deletions rather than a clear.
-            repeat(3) { clock += 40; backspace(state); advanceUntilIdle() }
+            // Two quick deletions, a pause, two more: the run never reaches three.
+            repeat(2) { clock += 60; backspace(state); advanceUntilIdle() }
             clock += 900
-            repeat(3) { clock += 40; backspace(state); advanceUntilIdle() }
+            repeat(2) { clock += 60; backspace(state); advanceUntilIdle() }
 
-            assertEquals("", state().rows.first { it.code == "USD" }.amountText)
+            assertEquals("12", state().rows.first { it.code == "USD" }.amountText)
         }
 
     @Test

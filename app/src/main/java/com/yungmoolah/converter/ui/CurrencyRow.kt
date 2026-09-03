@@ -37,11 +37,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
@@ -70,7 +65,6 @@ fun CurrencyRow(
     row: CurrencyRowUi,
     onAmountChanged: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
-    onClear: () -> Unit,
     modifier: Modifier = Modifier,
     dragHandle: Modifier = Modifier,
     isDragging: Boolean = false,
@@ -158,7 +152,6 @@ fun CurrencyRow(
                     focusRequester = focusRequester,
                     onValueChange = onAmountChanged,
                     onFocusChanged = onFocusChanged,
-                    onClear = onClear,
                 )
                 row.rateLabel?.let { label ->
                     Spacer(Modifier.height(3.dp))
@@ -191,7 +184,6 @@ private fun AmountField(
     focusRequester: FocusRequester,
     onValueChange: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
-    onClear: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     var field by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
@@ -222,17 +214,7 @@ private fun AmountField(
             .fillMaxWidth()
             .focusRequester(focusRequester)
             .onFocusChanged { onFocusChanged(it.isFocused) }
-            .semantics { this.contentDescription = contentDescription }
-            // Holding the keyboard's delete key wipes the whole amount rather than
-            // walking back through it a digit at a time. The first *repeat* of the
-            // key press is the signal, and consuming it stops the per-digit deletes.
-            .onPreviewKeyEvent { event ->
-                val heldDown = event.type == KeyEventType.KeyDown &&
-                    event.key == Key.Backspace &&
-                    event.nativeKeyEvent.repeatCount > 0
-                if (heldDown) onClear()
-                heldDown
-            },
+            .semantics { this.contentDescription = contentDescription },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterEnd) {
                 if (text.isEmpty()) {

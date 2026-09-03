@@ -119,6 +119,7 @@ fun MoolahScreen(
                         val shown = state.rows.firstOrNull { it.isActive }?.amountText.orEmpty()
                         onAmountChanged(state.activeCode, shown + key)
                     },
+                    onClear = { onClear(state.activeCode) },
                     // Above the keyboard while it is up, above the navigation bar
                     // when it is not: imePadding consumes the keyboard inset, so
                     // navigationBarsPadding only adds anything once it is gone.
@@ -190,7 +191,6 @@ fun MoolahScreen(
                                         onRowFocused(row.code)
                                     }
                                 },
-                                onClear = { onClear(row.code) },
                                 dragHandle = Modifier.longPressDraggableHandle(),
                                 isDragging = isDragging,
                             )

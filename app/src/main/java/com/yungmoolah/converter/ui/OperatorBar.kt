@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -27,27 +28,49 @@ import com.yungmoolah.converter.domain.TIMES
 import com.yungmoolah.converter.ui.theme.AmountTextStyle
 import com.yungmoolah.converter.ui.theme.MoolahShapes
 
-/** Every key on the bar, in the order they appear. */
-private val KEYS = listOf('(', ')', DIVIDE, TIMES, MINUS, '+')
+/** The arithmetic keys, in the order they appear. */
+private val OPERATOR_KEYS = listOf('(', ')', DIVIDE, TIMES, MINUS, '+')
 
 /**
- * The arithmetic keys, sat above the number pad.
+ * The keys the number pad does not have, sat above it while a row is being edited.
  *
- * The system's decimal keyboard has no operators on it, so a sum has to be typed
- * from somewhere: this bar appears while a row is being edited and each key is
- * appended to the entry.
+ * The system's decimal keyboard carries no operators, so a sum has to be typed from
+ * somewhere. It also gives the amount a clear key: holding the keyboard's own delete
+ * is detected where it can be (see `ConverterViewModel.registerDeletion`), but that
+ * is a guess about a key the app does not own, and clearing an amount should not
+ * depend on a guess.
  */
 @Composable
-fun OperatorBar(onKey: (Char) -> Unit, modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth()) {
+fun OperatorBar(
+    onKey: (Char) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(color = colors.surfaceContainer, modifier = modifier.fillMaxWidth()) {
         Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = colors.outlineVariant)
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
-                for (key in KEYS) {
-                    OperatorKey(key = key, onClick = { onKey(key) }, modifier = Modifier.weight(1f))
+                BarKey(
+                    label = "C",
+                    description = "Clear amount",
+                    background = colors.tertiaryContainer,
+                    foreground = colors.onTertiaryContainer,
+                    onClick = onClear,
+                    modifier = Modifier.weight(1f),
+                )
+                for (key in OPERATOR_KEYS) {
+                    BarKey(
+                        label = key.toString(),
+                        description = describe(key),
+                        background = colors.surfaceContainerHigh,
+                        foreground = colors.onSurface,
+                        onClick = { onKey(key) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -55,20 +78,27 @@ fun OperatorBar(onKey: (Char) -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun OperatorKey(key: Char, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun BarKey(
+    label: String,
+    description: String,
+    background: Color,
+    foreground: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .height(42.dp)
             .clip(MoolahShapes.Chip)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .background(background)
             .clickable(onClick = onClick)
-            .semantics { contentDescription = describe(key) },
+            .semantics { contentDescription = description },
     ) {
         Text(
-            text = key.toString(),
-            style = AmountTextStyle.copy(fontSize = 19.sp, letterSpacing = 0.sp),
-            color = MaterialTheme.colorScheme.onSurface,
+            text = label,
+            style = AmountTextStyle.copy(fontSize = 18.sp, letterSpacing = 0.sp),
+            color = foreground,
         )
     }
 }

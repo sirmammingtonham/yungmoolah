@@ -158,14 +158,18 @@ class ConverterViewModel(
     }
 
     /**
-     * Notes a single-character deletion and reports whether the delete key is being
-     * held down.
+     * Notes a deletion and reports whether the delete key is being held down.
      *
-     * A backstop for the keyboards that delete through the input connection rather
-     * than by sending key events, where the field never sees a repeated key press.
-     * What it can always see is the *rate*: a person tapping delete cannot produce
-     * four deletions [FAST_DELETION_WINDOW_MS] apart, but auto-repeat does nothing
-     * else.
+     * There is no reliable way to observe a long press on a key the app does not
+     * own. Keyboards deliver a held backspace in whichever way they like — some
+     * send key events, some delete through the input connection, and the ones that
+     * synthesise their own repeats report every press as a first press — so none of
+     * that can be trusted. What is always visible is the *rate* of deletions:
+     * auto-repeat produces a run no thumb can, whichever route it arrives by.
+     *
+     * The thresholds are deliberately forgiving. A short amount empties within a
+     * few presses, so waiting for a long run means the field is already clear by
+     * the time the run is recognised.
      */
     private fun registerDeletion(): Boolean {
         val now = nowMillis()
@@ -395,9 +399,13 @@ class ConverterViewModel(
     }
 
     private companion object {
-        /** Auto-repeat fires roughly every 50ms; no thumb manages four taps this fast. */
-        const val FAST_DELETION_WINDOW_MS = 120L
-        const val FAST_DELETIONS_TO_CLEAR = 4
+        /**
+         * A held key repeats every 50-300ms depending on the keyboard, accelerating
+         * as it goes. Three deletions inside this window is around six a second,
+         * which is beyond deliberate tapping and well inside auto-repeat.
+         */
+        const val FAST_DELETION_WINDOW_MS = 260L
+        const val FAST_DELETIONS_TO_CLEAR = 3
     }
 
     class Factory(private val repository: RatesRepository) : ViewModelProvider.Factory {

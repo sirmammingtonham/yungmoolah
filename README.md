@@ -26,8 +26,9 @@ working offline.
   hand.
 - **Pin, reorder, remove.** Add from a searchable list of every supported currency,
   swipe a row away (with undo), long-press and drag one to reorder.
-- **Hold delete to clear.** Holding the keyboard's delete key wipes the whole
-  amount rather than walking back through it a digit at a time.
+- **Clear in one tap** with the `C` key on the arithmetic bar. Holding the
+  keyboard's own delete key clears the amount too, where the keyboard makes that
+  visible — see below.
 - **Grouped as you type.** The row being edited gains thousands separators
   keystroke by keystroke, and the caret stays at the end wherever you tap.
 - **Tap anywhere else** to drop the highlight and put the keyboard away.
@@ -120,10 +121,15 @@ A few decisions worth knowing:
   recipe for a three-step one half a percent closer, which is the wrong trade for
   arithmetic done from memory. Multiplying by 0.83 is never suggested, however
   close to the rate it lands.
-- **Holding delete is detected two ways.** The field watches for a repeated
-  backspace key press, which is what most keyboards send; for the ones that delete
-  through the input connection instead, the ViewModel watches the *rate* of
-  single-character deletions, since auto-repeat produces bursts no thumb can.
+- **A held delete key cannot be observed directly.** The key belongs to the
+  keyboard, not the app, and keyboards deliver a hold however they like: some send
+  key events, some delete through the input connection, and the ones that
+  synthesise their own repeats report every press as a first press, so a
+  `repeatCount` check never fires. What is always visible is the *rate* of
+  deletions, and `registerDeletion` clears the amount on a run faster than
+  deliberate tapping. Because that is still inference about someone else's key, the
+  `C` key on the arithmetic bar is the guaranteed route, and clearing an amount
+  does not depend on a guess.
 - **Rates are stored relative to one base.** Converting between two arbitrary
   currencies is then the ratio of their two rates, which is what lets a single
   edited amount drive every row without touching the network.
@@ -148,7 +154,7 @@ A few decisions worth knowing:
 
 ## Tests
 
-`./gradlew testDebugUnitTest` runs 168 JVM tests — no device or emulator needed,
+`./gradlew testDebugUnitTest` runs 167 JVM tests — no device or emulator needed,
 since the Compose and Android-dependent cases run under Robolectric.
 
 | Suite | Covers |
